@@ -1,0 +1,11 @@
+{
+  "paths": {
+    "workspace": "./workspace",
+    "imports": "./workspace/imports",
+    "processed": "./workspace/processed",
+    "exports": "./workspace/exports"
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}
