@@ -3,9 +3,19 @@
     "workspace": "./workspace",
     "imports": "./workspace/imports",
     "processed": "./workspace/processed",
-    "exports": "./workspace/exports"
+    "exports": "./workspace/exports",
+    "runs": "./workspace/runs"
   },
   "logging": {
     "level": "INFO"
+  },
+  "sharp": {
+    "executable": "/Users/andreakorkeamaki/Desktop/ml-sharp/run-sharp",
+    "checkpoint": "/Users/andreakorkeamaki/Desktop/ml-sharp/models/sharp_2572gikvuh.pt",
+    "default_device": "cpu"
+  },
+  "web": {
+    "host": "127.0.0.1",
+    "port": 4173
   }
 }

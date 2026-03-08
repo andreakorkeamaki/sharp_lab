@@ -8,6 +8,9 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     include_package_data=True,
+    package_data={
+        "sharp_lab.ui": ["static/*.html", "static/*.css", "static/*.js"],
+    },
     python_requires=">=3.9",
     entry_points={
         "console_scripts": [

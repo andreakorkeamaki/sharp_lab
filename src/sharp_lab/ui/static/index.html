@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sharp_lab Local Studio</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.178.0/three.module.js",
+          "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/0.1.10/spark.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="hero">
+          <p class="eyebrow">sharp_lab</p>
+          <h1>Local SHARP Studio</h1>
+          <p class="lede">Run Apple SHARP locally, save every run to disk, and inspect the resulting splats immediately in the browser.</p>
+        </div>
+
+        <section class="card">
+          <p class="label">Generate</p>
+          <label class="field-label" for="input-path">Input image or folder</label>
+          <input id="input-path" type="text" placeholder="/Users/you/Desktop/applesharp" spellcheck="false" />
+
+          <label class="field-label" for="device">Device</label>
+          <select id="device">
+            <option value="">Default</option>
+            <option value="cpu">CPU</option>
+            <option value="mps">MPS</option>
+            <option value="cuda">CUDA</option>
+          </select>
+
+          <div class="button-stack">
+            <button id="run-button" type="button">Create Splat</button>
+            <button id="refresh-runs" type="button" class="secondary">Refresh Runs</button>
+          </div>
+          <p id="run-status" class="hint">Ready.</p>
+        </section>
+
+        <section class="card">
+          <p class="label">Orientation</p>
+          <div class="transform-grid">
+            <button id="flip-x" type="button" class="secondary">Flip X</button>
+            <button id="flip-y" type="button" class="secondary">Flip Y</button>
+            <button id="flip-z" type="button" class="secondary">Flip Z</button>
+            <button id="turn-left" type="button" class="secondary">Turn Left</button>
+            <button id="turn-right" type="button" class="secondary">Turn Right</button>
+            <button id="reset-pose" type="button" class="secondary">Reset Pose</button>
+          </div>
+          <p class="hint">If the splat appears upside down or reversed, use these transforms. SHARP exports in an OpenCV camera convention.</p>
+        </section>
+
+        <section class="card">
+          <p class="label">Environment</p>
+          <dl class="meta-grid">
+            <div>
+              <dt>Workspace</dt>
+              <dd id="workspace-path">-</dd>
+            </div>
+            <div>
+              <dt>SHARP</dt>
+              <dd id="sharp-status">-</dd>
+            </div>
+            <div>
+              <dt>Checkpoint</dt>
+              <dd id="checkpoint-status">-</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="card runs-card">
+          <div class="runs-header">
+            <p class="label">Runs</p>
+            <p id="run-count" class="count-pill">0</p>
+          </div>
+          <div id="runs-list" class="runs-list"></div>
+        </section>
+      </aside>
+
+      <main class="viewer-shell">
+        <div class="viewer-topbar">
+          <div>
+            <p class="viewer-label">Current Scene</p>
+            <h2 id="viewer-title">No splat loaded</h2>
+          </div>
+          <button id="refit-camera" type="button" class="secondary">Refit Camera</button>
+        </div>
+        <div id="canvas-wrap" class="canvas-wrap"></div>
+      </main>
+    </div>
+
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>

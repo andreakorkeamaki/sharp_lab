@@ -16,7 +16,9 @@ class ConfigTests(unittest.TestCase):
 
             self.assertEqual(config.paths.workspace, (tmp_path / "workspace").resolve())
             self.assertEqual(config.paths.imports, (tmp_path / "workspace" / "imports").resolve())
+            self.assertEqual(config.paths.runs, (tmp_path / "workspace" / "runs").resolve())
             self.assertEqual(config.logging.level, "INFO")
+            self.assertEqual(config.web.port, 4173)
 
     def test_load_json_config_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -27,10 +29,20 @@ class ConfigTests(unittest.TestCase):
 {
   "paths": {
     "workspace": "./lab",
-    "imports": "./lab/incoming"
+    "imports": "./lab/incoming",
+    "runs": "./lab/runs"
   },
   "logging": {
     "level": "debug"
+  },
+  "sharp": {
+    "executable": "./tools/run-sharp",
+    "checkpoint": "./models/sharp.pt",
+    "default_device": "mps"
+  },
+  "web": {
+    "host": "0.0.0.0",
+    "port": 9000
   }
 }
 """.strip(),
@@ -42,4 +54,10 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.paths.workspace, (tmp_path / "lab").resolve())
             self.assertEqual(config.paths.imports, (tmp_path / "lab" / "incoming").resolve())
             self.assertEqual(config.paths.processed, (tmp_path / "lab" / "processed").resolve())
+            self.assertEqual(config.paths.runs, (tmp_path / "lab" / "runs").resolve())
             self.assertEqual(config.logging.level, "DEBUG")
+            self.assertEqual(config.sharp.executable, (tmp_path / "tools" / "run-sharp").resolve())
+            self.assertEqual(config.sharp.checkpoint, (tmp_path / "models" / "sharp.pt").resolve())
+            self.assertEqual(config.sharp.default_device, "mps")
+            self.assertEqual(config.web.host, "0.0.0.0")
+            self.assertEqual(config.web.port, 9000)

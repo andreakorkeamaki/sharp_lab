@@ -1,14 +1,15 @@
 # sharp_lab
 
-`sharp_lab` is a local Python toolkit for experimenting with iPhone photos and preparing assets for Apple SHARP workflows. It ships as an installable package with a modular core so the current CLI can later sit beside a desktop or web UI without rewriting the processing logic.
+`sharp_lab` is a local Python toolkit for experimenting with iPhone photos and preparing assets for Apple SHARP workflows. It ships as an installable package with a modular core so the current CLI, local web UI, and any future desktop or hosted frontend can reuse the same services.
 
 ## Features
 
 - Installable Python project with `pyproject.toml`
 - `src/` layout and console entry point: `sharp-lab`
-- Modular services for discovery/import, preprocessing, export, and future SHARP integration
+- Modular services for discovery/import, preprocessing, export, and local SHARP execution
 - Config file support with TOML or JSON
 - Structured logging setup
+- Local web UI for launching SHARP runs and previewing 3DGS output in the browser
 - Test suite included for local verification
 - Clean default project layout for local asset workflows
 
@@ -19,11 +20,12 @@ sharp_lab/
 ├── pyproject.toml
 ├── README.md
 ├── .gitignore
+├── web_viewer/
 ├── src/
 │   └── sharp_lab/
+│       ├── app.py
 │       ├── cli.py
 │       ├── config.py
-│       ├── logging_utils.py
 │       ├── discovery/
 │       ├── pipeline/
 │       ├── export/
@@ -52,9 +54,19 @@ workspace = "./workspace"
 imports = "./workspace/imports"
 processed = "./workspace/processed"
 exports = "./workspace/exports"
+runs = "./workspace/runs"
 
 [logging]
 level = "INFO"
+
+[sharp]
+executable = "/Users/andreakorkeamaki/Desktop/ml-sharp/run-sharp"
+checkpoint = "/Users/andreakorkeamaki/Desktop/ml-sharp/models/sharp_2572gikvuh.pt"
+default_device = "cpu"
+
+[web]
+host = "127.0.0.1"
+port = 4173
 ```
 
 ```json
@@ -63,35 +75,71 @@ level = "INFO"
     "workspace": "./workspace",
     "imports": "./workspace/imports",
     "processed": "./workspace/processed",
-    "exports": "./workspace/exports"
+    "exports": "./workspace/exports",
+    "runs": "./workspace/runs"
   },
   "logging": {
     "level": "INFO"
+  },
+  "sharp": {
+    "executable": "/Users/andreakorkeamaki/Desktop/ml-sharp/run-sharp",
+    "checkpoint": "/Users/andreakorkeamaki/Desktop/ml-sharp/models/sharp_2572gikvuh.pt",
+    "default_device": "cpu"
+  },
+  "web": {
+    "host": "127.0.0.1",
+    "port": 4173
   }
 }
 ```
 
-Then run example commands:
+## Core commands
 
 ```bash
-sharp-lab discover --source ~/Pictures/iPhone
-sharp-lab preprocess
-sharp-lab export --name sharp-ready
-sharp-lab sharp plan --bundle ./workspace/exports/sharp-ready
+sharp-lab sharp status
+sharp-lab sharp predict --input /Users/andreakorkeamaki/Desktop/applesharp
+sharp-lab sharp runs
+sharp-lab web
 ```
 
-## Commands
+What these do:
 
-- `sharp-lab discover --source <dir>`
-  - Finds supported image files and copies them into the managed imports area.
-- `sharp-lab preprocess`
-  - Runs the default preprocessing pipeline against imported assets.
-- `sharp-lab export --name <bundle-name>`
-  - Creates an export bundle with processed assets and a manifest.
-- `sharp-lab sharp plan --bundle <dir>`
-  - Produces a placeholder SHARP submission plan for future integration work.
-- `sharp-lab config-path`
-  - Shows the resolved config file location.
+- `sharp-lab sharp status`
+  - Shows whether the local SHARP executable and checkpoint are available.
+- `sharp-lab sharp predict --input <path>`
+  - Runs the local SHARP CLI and stores a tracked run in `workspace/runs/<run-id>/`.
+- `sharp-lab sharp runs`
+  - Lists previous local SHARP runs and their manifests.
+- `sharp-lab web`
+  - Starts the local browser UI so you can run SHARP and inspect generated splats in one place.
+
+## Local web UI
+
+Start the UI:
+
+```bash
+sharp-lab web
+```
+
+Then open:
+
+```text
+http://127.0.0.1:4173
+```
+
+The local UI can:
+
+- trigger SHARP against a local image or folder path
+- save each run under `workspace/runs/`
+- keep a `run.json` manifest and a `sharp.log` for each run
+- preview the generated `.ply` directly in the browser with Spark
+- apply quick orientation fixes when the splat appears upside down or mirrored
+
+This UI is local-first. SHARP inference still runs on your machine. The browser is only a frontend.
+
+## Standalone viewer
+
+The repo also includes a static splat viewer in `web_viewer/`. It is useful as a separate experiment or for hosting a viewer-only frontend later, but `sharp-lab web` is the integrated local workflow.
 
 ## Architecture notes
 
@@ -100,10 +148,10 @@ The package is organized around reusable services rather than CLI-specific code:
 - `sharp_lab.discovery`: source scanning and import logic
 - `sharp_lab.pipeline`: preprocessing orchestration and pipeline steps
 - `sharp_lab.export`: bundle creation and export manifests
-- `sharp_lab.sharp`: placeholder boundary for future Apple SHARP integration
-- `sharp_lab.ui`: reserved integration point for future UI adapters
+- `sharp_lab.sharp`: local SHARP execution, run tracking, and future Apple SHARP integration
+- `sharp_lab.ui`: local web server and packaged browser UI
 
-The CLI is intentionally thin. A future UI can call the same service classes directly.
+The CLI is intentionally thin. The web UI calls the same application facade and SHARP service classes used by the CLI.
 
 ## Testing
 
@@ -115,5 +163,5 @@ python -m unittest discover -s tests -v
 
 - Add real image transforms backed by Pillow or pyvips
 - Add metadata extraction for EXIF and capture device details
-- Add concrete SHARP upload/auth flows
-- Add desktop or web UI adapters on top of the service layer
+- Add conversion/export helpers for web-optimized splat formats
+- Add desktop or hosted UI adapters on top of the same service layer

@@ -1,3 +1,3 @@
-from sharp_lab.sharp.integration import SharpIntegrationService
+from sharp_lab.sharp.integration import SharpIntegrationService, SharpRunRecord
 
-__all__ = ["SharpIntegrationService"]
+__all__ = ["SharpIntegrationService", "SharpRunRecord"]

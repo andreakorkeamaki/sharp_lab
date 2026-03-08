@@ -19,6 +19,7 @@ class PathConfig:
     imports: Path
     processed: Path
     exports: Path
+    runs: Path
 
 
 @dataclass
@@ -27,23 +28,49 @@ class LoggingConfig:
 
 
 @dataclass
+class SharpConfig:
+    executable: Path
+    checkpoint: Path | None = None
+    default_device: str = "cpu"
+
+
+@dataclass
+class WebConfig:
+    host: str = "127.0.0.1"
+    port: int = 4173
+
+
+@dataclass
 class SharpLabConfig:
     paths: PathConfig
     logging: LoggingConfig
+    sharp: SharpConfig
+    web: WebConfig
     config_file: Path | None = None
 
     @classmethod
     def default(cls, base_dir: Path | None = None) -> "SharpLabConfig":
         root = (base_dir or Path.cwd()).resolve()
         workspace = root / "workspace"
+        default_sharp_root = Path.home() / "Desktop" / "ml-sharp"
+        default_executable = default_sharp_root / "run-sharp"
+        default_checkpoint = default_sharp_root / "models" / "sharp_2572gikvuh.pt"
+        checkpoint = default_checkpoint if default_checkpoint.exists() else None
         return cls(
             paths=PathConfig(
                 workspace=workspace,
                 imports=workspace / "imports",
                 processed=workspace / "processed",
                 exports=workspace / "exports",
+                runs=workspace / "runs",
             ),
             logging=LoggingConfig(),
+            sharp=SharpConfig(
+                executable=default_executable,
+                checkpoint=checkpoint,
+                default_device="cpu",
+            ),
+            web=WebConfig(),
             config_file=None,
         )
 
@@ -61,11 +88,20 @@ class SharpLabConfig:
 
         path_section = raw.get("paths", {})
         logging_section = raw.get("logging", {})
+        sharp_section = raw.get("sharp", {})
+        web_section = raw.get("web", {})
 
         workspace = _resolve_path(path_section.get("workspace", default_config.paths.workspace), root)
         imports = _resolve_path(path_section.get("imports", workspace / "imports"), root)
         processed = _resolve_path(path_section.get("processed", workspace / "processed"), root)
         exports = _resolve_path(path_section.get("exports", workspace / "exports"), root)
+        runs = _resolve_path(path_section.get("runs", workspace / "runs"), root)
+
+        executable = _resolve_path(sharp_section.get("executable", default_config.sharp.executable), root)
+        checkpoint_value = sharp_section.get("checkpoint")
+        checkpoint = default_config.sharp.checkpoint
+        if checkpoint_value is not None:
+            checkpoint = _resolve_path(checkpoint_value, root)
 
         return cls(
             paths=PathConfig(
@@ -73,8 +109,18 @@ class SharpLabConfig:
                 imports=imports,
                 processed=processed,
                 exports=exports,
+                runs=runs,
             ),
             logging=LoggingConfig(level=str(logging_section.get("level", "INFO")).upper()),
+            sharp=SharpConfig(
+                executable=executable,
+                checkpoint=checkpoint,
+                default_device=str(sharp_section.get("default_device", default_config.sharp.default_device)),
+            ),
+            web=WebConfig(
+                host=str(web_section.get("host", default_config.web.host)),
+                port=int(web_section.get("port", default_config.web.port)),
+            ),
             config_file=resolved_path.resolve(),
         )
 
@@ -84,6 +130,7 @@ class SharpLabConfig:
             self.paths.imports,
             self.paths.processed,
             self.paths.exports,
+            self.paths.runs,
         ):
             path.mkdir(parents=True, exist_ok=True)
 

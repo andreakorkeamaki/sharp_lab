@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sharp_lab Viewer</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.178.0/three.module.js",
+          "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/0.1.10/spark.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="control-panel">
+        <div class="brand-block">
+          <p class="eyebrow">sharp_lab</p>
+          <h1>3DGS Viewer</h1>
+          <p class="lede">
+            Load a local SHARP `.ply` or a hosted splat URL. This viewer is static and can be run locally
+            or deployed to Vercel later.
+          </p>
+        </div>
+
+        <section class="panel-card">
+          <label class="label" for="file-input">Local File</label>
+          <input id="file-input" type="file" accept=".ply,.spz,.splat,.ksplat" />
+          <p class="hint">Best for local tests. Uses the browser file API, so the splat never has to leave your computer.</p>
+        </section>
+
+        <section class="panel-card">
+          <label class="label" for="url-input">Remote URL</label>
+          <div class="url-row">
+            <input
+              id="url-input"
+              type="url"
+              placeholder="https://example.com/scene.ply"
+              spellcheck="false"
+            />
+            <button id="load-url" type="button">Load</button>
+          </div>
+          <p class="hint">The remote file must allow browser access with CORS headers.</p>
+        </section>
+
+        <section class="panel-card">
+          <p class="label">Viewer</p>
+          <div class="button-row">
+            <button id="demo-button" type="button">Load Demo</button>
+            <button id="reset-camera" type="button">Refit Camera</button>
+          </div>
+          <ul class="tips">
+            <li>Left drag: orbit</li>
+            <li>Right drag: pan</li>
+            <li>Wheel: zoom</li>
+          </ul>
+        </section>
+
+        <section class="panel-card">
+          <p class="label">Orientation</p>
+          <div class="transform-grid">
+            <button id="flip-x" type="button">Flip X</button>
+            <button id="flip-y" type="button">Flip Y</button>
+            <button id="flip-z" type="button">Flip Z</button>
+            <button id="turn-left" type="button">Turn Left</button>
+            <button id="turn-right" type="button">Turn Right</button>
+            <button id="reset-pose" type="button">Reset Pose</button>
+          </div>
+          <p class="hint">
+            SHARP exports in a camera-centric OpenCV convention. Some viewers need a manual flip or turn to
+            line the splat up with web-style coordinates.
+          </p>
+        </section>
+
+        <section class="panel-card panel-status">
+          <p class="label">Status</p>
+          <p id="status-text">Ready.</p>
+          <dl class="meta-grid">
+            <div>
+              <dt>Source</dt>
+              <dd id="source-text">None</dd>
+            </div>
+            <div>
+              <dt>Splats</dt>
+              <dd id="splat-count">-</dd>
+            </div>
+          </dl>
+        </section>
+      </aside>
+
+      <main class="viewer-panel">
+        <div id="canvas-wrap" class="canvas-wrap"></div>
+        <div id="drop-zone" class="drop-zone">
+          <div class="drop-card">
+            <p class="drop-title">Drop a `.ply`, `.spz`, `.splat`, or `.ksplat` file</p>
+            <p class="drop-copy">Or use the controls on the left to load a local file or a hosted URL.</p>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

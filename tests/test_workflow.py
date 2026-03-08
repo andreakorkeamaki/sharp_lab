@@ -40,3 +40,62 @@ class WorkflowTests(unittest.TestCase):
             plan = SharpIntegrationService().plan_submission(bundle_dir)
             self.assertEqual(plan["status"], "planned")
             self.assertEqual(plan["asset_count"], 1)
+
+    def test_sharp_predict_records_run_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp_path = Path(temp_dir)
+            input_path = tmp_path / "sample.jpg"
+            input_path.write_bytes(b"fake-jpeg")
+
+            fake_sharp = tmp_path / "run-sharp"
+            fake_sharp.write_text(
+                """#!/bin/sh
+set -eu
+output_dir=""
+input_path=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    predict)
+      shift
+      ;;
+    -i)
+      input_path="$2"
+      shift 2
+      ;;
+    -o)
+      output_dir="$2"
+      shift 2
+      ;;
+    -c|--device)
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+mkdir -p "$output_dir"
+stem=$(basename "$input_path")
+stem=${stem%.*}
+printf 'ply\nformat ascii 1.0\nend_header\n' > "$output_dir/$stem.ply"
+printf 'fake sharp completed\n'
+""".strip(),
+                encoding="utf-8",
+            )
+            fake_sharp.chmod(0o755)
+
+            service = SharpIntegrationService(
+                runs_dir=tmp_path / "runs",
+                executable=fake_sharp,
+                checkpoint=None,
+                default_device="cpu",
+            )
+            run = service.predict(input_path, device="cpu")
+
+            self.assertEqual(run.status, "completed")
+            self.assertEqual(run.ply_files, ["sample.ply"])
+            manifest_path = tmp_path / "runs" / run.run_id / "run.json"
+            self.assertTrue(manifest_path.exists())
+            records = SharpIntegrationService(runs_dir=tmp_path / "runs").list_runs()
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].run_id, run.run_id)

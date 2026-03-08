@@ -1,1 +1,3 @@
-"""UI adapter package reserved for future desktop or web frontends."""
+from sharp_lab.ui.server import serve
+
+__all__ = ["serve"]
