@@ -56,15 +56,34 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          from pathlib import Path
+          import shutil
           import zipfile
+          from pathlib import Path
 
           dist_dir = Path("dist")
-          executable_name = "sharp-lab.exe" if Path("dist/sharp-lab.exe").exists() else "sharp-lab"
+          release_root = dist_dir / "${{ matrix.artifact_name }}"
+          executable_name = "Sharp Lab.exe" if (dist_dir / "Sharp Lab.exe").exists() else "Sharp Lab"
           source = dist_dir / executable_name
           archive = dist_dir / "${{ matrix.artifact_name }}.zip"
+          if release_root.exists():
+              shutil.rmtree(release_root)
+          release_root.mkdir(parents=True)
+
+          shutil.copy2(source, release_root / source.name)
+
+          for filename in ("README.md", "sharp_lab.example.json"):
+              path = Path(filename)
+              if path.exists():
+                  shutil.copy2(path, release_root / path.name)
+
+          runtime_dir = Path("runtime")
+          if runtime_dir.exists():
+              shutil.copytree(runtime_dir, release_root / "runtime")
+
           with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
-              handle.write(source, arcname=source.name)
+              for path in release_root.rglob("*"):
+                  if path.is_file():
+                      handle.write(path, arcname=path.relative_to(dist_dir))
           print(f"created {archive}")
           PY
 

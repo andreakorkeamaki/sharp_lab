@@ -142,59 +142,71 @@
         </section>
 
         <section id="view-editor" class="view-panel" data-view="editor">
-          <div class="editor-grid">
-            <aside class="editor-sidebar">
-              <section class="card">
-                <div class="section-heading">
-                  <div>
-                    <p class="label">Editor</p>
-                    <h2 id="viewer-title">No splat loaded</h2>
-                  </div>
-                </div>
+          <section class="viewer-shell viewer-shell-editor">
+            <div class="editor-hud">
+              <div class="editor-hud-title">
+                <p class="viewer-label">Editor</p>
+                <h2 id="viewer-title">No splat loaded</h2>
                 <p id="editor-status" class="hint">Choose a completed run from the Runs page to start editing.</p>
-                <dl class="meta-grid">
-                  <div>
-                    <dt>Run ID</dt>
-                    <dd id="editor-run-id">-</dd>
-                  </div>
-                  <div>
-                    <dt>Source</dt>
-                    <dd id="editor-source">-</dd>
-                  </div>
-                  <div>
-                    <dt>Output</dt>
-                    <dd id="editor-output">-</dd>
-                  </div>
-                  <div>
-                    <dt>Active File</dt>
-                    <dd id="editor-file">-</dd>
-                  </div>
-                </dl>
-              </section>
+              </div>
+              <div class="editor-hud-actions">
+                <button id="toggle-run-info" type="button" class="secondary hud-button">Run Info</button>
+                <button id="toggle-fly-mode" type="button" class="secondary hud-button">Enter Fly Mode</button>
+              </div>
+            </div>
 
-              <section class="card">
-                <div class="section-heading">
-                  <div>
-                    <p class="label">Orientation</p>
-                    <h2>Scene transforms</h2>
-                  </div>
+            <section id="run-info-panel" class="floating-panel floating-panel-info is-hidden">
+              <div class="section-heading">
+                <div>
+                  <p class="label">Run</p>
+                  <h2>Current output</h2>
                 </div>
-                <div class="transform-grid">
-                  <button id="flip-x" type="button" class="secondary">Flip X</button>
-                  <button id="flip-y" type="button" class="secondary">Flip Y</button>
-                  <button id="flip-z" type="button" class="secondary">Flip Z</button>
-                  <button id="turn-left" type="button" class="secondary">Turn Left</button>
-                  <button id="turn-right" type="button" class="secondary">Turn Right</button>
-                  <button id="reset-pose" type="button" class="secondary">Reset Pose</button>
+              </div>
+              <dl class="meta-grid">
+                <div>
+                  <dt>Run ID</dt>
+                  <dd id="editor-run-id">-</dd>
                 </div>
-                <p class="hint">These controls currently adjust the preview so you can inspect the splat from the right orientation before exporting.</p>
-              </section>
+                <div>
+                  <dt>Source</dt>
+                  <dd id="editor-source">-</dd>
+                </div>
+                <div>
+                  <dt>Output</dt>
+                  <dd id="editor-output">-</dd>
+                </div>
+                <div>
+                  <dt>Active File</dt>
+                  <dd id="editor-file">-</dd>
+                </div>
+              </dl>
+            </section>
 
-              <section class="card">
+            <section class="floating-panel floating-panel-left">
+              <div class="section-heading">
+                <div>
+                  <p class="label">Camera</p>
+                  <h2>View controls</h2>
+                </div>
+              </div>
+              <div class="compact-grid">
+                <button id="refit-camera" type="button" class="secondary">Refit</button>
+                <button id="flip-x" type="button" class="secondary">Flip X</button>
+                <button id="flip-y" type="button" class="secondary">Flip Y</button>
+                <button id="flip-z" type="button" class="secondary">Flip Z</button>
+                <button id="turn-left" type="button" class="secondary">Left 90</button>
+                <button id="turn-right" type="button" class="secondary">Right 90</button>
+                <button id="reset-pose" type="button" class="secondary">Reset</button>
+              </div>
+              <p class="hint" id="fly-mode-hint">Orbit with the mouse, or enter fly mode for drag-to-look navigation.</p>
+            </section>
+
+            <div class="floating-stack floating-stack-right">
+              <section class="floating-panel floating-panel-compact">
                 <div class="section-heading">
                   <div>
                     <p class="label">Optimize</p>
-                    <h2>Decimate point density</h2>
+                    <h2>Decimate</h2>
                   </div>
                 </div>
                 <label class="field-label" for="artifact-select">Active PLY</label>
@@ -207,50 +219,28 @@
                 </div>
 
                 <div class="button-stack">
-                  <button id="decimate-run" type="button">Create Decimated Copy</button>
+                  <button id="decimate-run" type="button">Create Copy</button>
                 </div>
-                <p id="decimation-hint" class="hint">This creates another `.ply` inside the same run folder and opens it in the editor.</p>
               </section>
 
-              <section class="card">
+              <section class="floating-panel floating-panel-compact">
                 <div class="section-heading">
                   <div>
                     <p class="label">Export</p>
-                    <h2>Take the file elsewhere</h2>
+                    <h2>Output</h2>
                   </div>
                 </div>
                 <div class="button-stack">
-                  <button id="download-ply" type="button">Download Current PLY</button>
-                  <button id="copy-output-path" type="button" class="secondary">Copy Output Path</button>
-                  <button id="refit-camera" type="button" class="secondary">Refit Camera</button>
+                  <button id="download-ply" type="button">Download PLY</button>
+                  <button id="copy-output-path" type="button" class="secondary">Copy Path</button>
                 </div>
-                <p class="hint">Download the generated `.ply` and continue in tools like Blender. The downloaded file is the current run output.</p>
               </section>
+            </div>
 
-              <section class="card">
-                <div class="section-heading">
-                  <div>
-                    <p class="label">Navigation</p>
-                    <h2>Fly through the scene</h2>
-                  </div>
-                </div>
-                <div class="button-stack">
-                  <button id="toggle-fly-mode" type="button" class="secondary">Enter Fly Mode</button>
-                </div>
-                <p class="hint" id="fly-mode-hint">Mouse look with `W A S D`, `Q/E` for down/up, and `Shift` to move faster. Press `Esc` to leave fly mode.</p>
-              </section>
-            </aside>
-
-            <section class="viewer-shell">
-              <div class="viewer-topbar">
-                <div>
-                  <p class="viewer-label">Viewport</p>
-                  <h2>Preview</h2>
-                </div>
-              </div>
+            <div class="viewer-stage">
               <div id="canvas-wrap" class="canvas-wrap"></div>
-            </section>
-          </div>
+            </div>
+          </section>
         </section>
       </main>
     </div>

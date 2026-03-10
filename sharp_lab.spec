@@ -24,10 +24,10 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="sharp-lab",
+    name="Sharp Lab",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    console=False,
 )

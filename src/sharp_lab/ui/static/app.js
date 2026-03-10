@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/controls/OrbitControls.js";
-import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/controls/PointerLockControls.js";
 import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 
 const inputPathField = document.getElementById("input-path");
@@ -34,6 +33,7 @@ const editorFile = document.getElementById("editor-file");
 const canvasWrap = document.getElementById("canvas-wrap");
 const refitCameraButton = document.getElementById("refit-camera");
 const toggleFlyModeButton = document.getElementById("toggle-fly-mode");
+const flyModeHint = document.getElementById("fly-mode-hint");
 const flipXButton = document.getElementById("flip-x");
 const flipYButton = document.getElementById("flip-y");
 const flipZButton = document.getElementById("flip-z");
@@ -46,6 +46,9 @@ const decimationValue = document.getElementById("decimation-value");
 const decimateRunButton = document.getElementById("decimate-run");
 const downloadPlyButton = document.getElementById("download-ply");
 const copyOutputPathButton = document.getElementById("copy-output-path");
+const appShell = document.querySelector(".app-shell");
+const runInfoPanel = document.getElementById("run-info-panel");
+const toggleRunInfoButton = document.getElementById("toggle-run-info");
 
 const viewButtons = [...document.querySelectorAll("[data-view-target]")];
 const viewPanels = [...document.querySelectorAll("[data-view]")];
@@ -66,8 +69,6 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
 controls.target.set(0, 0.2, 0);
-
-const flyControls = new PointerLockControls(camera, renderer.domElement);
 
 const spark = new SparkRenderer({ renderer });
 scene.add(spark);
@@ -107,6 +108,16 @@ const flyMovement = {
 };
 const flyClock = new THREE.Clock();
 let flyModeEnabled = false;
+let flyLookActive = false;
+let activePointerId = null;
+let lastPointerX = 0;
+let lastPointerY = 0;
+const flyEuler = new THREE.Euler(0, 0, 0, "YXZ");
+const flyForward = new THREE.Vector3();
+const flyRight = new THREE.Vector3();
+const flyUp = new THREE.Vector3(0, 1, 0);
+const boundsSize = new THREE.Vector3();
+let runInfoVisible = false;
 
 function formatElapsed(totalSeconds) {
   const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -201,9 +212,10 @@ function setBusy(isBusy) {
 }
 
 function setView(viewName) {
-  if (viewName !== "editor" && flyControls.isLocked) {
-    flyControls.unlock();
+  if (viewName !== "editor" && flyModeEnabled) {
+    setFlyMode(false);
   }
+  appShell.classList.toggle("is-editor-focus", viewName === "editor");
   for (const button of viewButtons) {
     button.classList.toggle("active", button.dataset.viewTarget === viewName);
   }
@@ -216,6 +228,12 @@ function setView(viewName) {
       controls.update();
     });
   }
+}
+
+function setRunInfoVisible(visible) {
+  runInfoVisible = visible;
+  runInfoPanel.classList.toggle("is-hidden", !visible);
+  toggleRunInfoButton.textContent = visible ? "Hide Info" : "Run Info";
 }
 
 function frameBounds(box) {
@@ -240,52 +258,65 @@ function syncOrbitTarget() {
   controls.update();
 }
 
+function syncFlyEulerFromCamera() {
+  flyEuler.setFromQuaternion(camera.quaternion);
+}
+
 function setFlyMode(enabled) {
   flyModeEnabled = enabled;
   controls.enabled = !enabled;
   toggleFlyModeButton.textContent = enabled ? "Exit Fly Mode" : "Enter Fly Mode";
   toggleFlyModeButton.classList.toggle("secondary", !enabled);
+  renderer.domElement.classList.toggle("is-fly-mode", enabled);
+  flyModeHint.textContent = enabled
+    ? "Drag in the viewport to look around. Use `W A S D`, `Q/E`, and `Shift` to move."
+    : "Orbit with the mouse, or enter fly mode for drag-to-look navigation.";
   flyClock.getDelta();
+  if (enabled) {
+    syncFlyEulerFromCamera();
+    editorStatus.textContent = "Fly mode enabled. Drag in the viewport to look around.";
+    return;
+  }
+
+  stopFlyLook();
+  for (const key of Object.keys(flyMovement)) {
+    flyMovement[key] = false;
+  }
   if (!enabled) {
     syncOrbitTarget();
   }
 }
 
-function onFlyLockChange() {
-  setFlyMode(flyControls.isLocked);
-  if (!flyControls.isLocked) {
-    for (const key of Object.keys(flyMovement)) {
-      flyMovement[key] = false;
-    }
-  }
-}
-
 function updateFlyMovement() {
-  if (!flyModeEnabled || !flyControls.isLocked) {
+  if (!flyModeEnabled) {
     flyClock.getDelta();
     return;
   }
 
   const delta = Math.min(flyClock.getDelta(), 0.05);
-  const speed = (flyMovement.boost ? 4.8 : 1.8) * delta;
+  const sceneScale = currentBounds ? Math.max(1.5, currentBounds.getSize(boundsSize).length() / 5) : 2.5;
+  const speed = (flyMovement.boost ? 9 : 3.2) * sceneScale * delta;
+
+  camera.getWorldDirection(flyForward).normalize();
+  flyRight.crossVectors(flyForward, flyUp).normalize();
 
   if (flyMovement.forward) {
-    flyControls.moveForward(speed);
+    camera.position.addScaledVector(flyForward, speed);
   }
   if (flyMovement.backward) {
-    flyControls.moveForward(-speed);
+    camera.position.addScaledVector(flyForward, -speed);
   }
   if (flyMovement.left) {
-    flyControls.moveRight(-speed);
+    camera.position.addScaledVector(flyRight, -speed);
   }
   if (flyMovement.right) {
-    flyControls.moveRight(speed);
+    camera.position.addScaledVector(flyRight, speed);
   }
   if (flyMovement.up) {
-    camera.position.y += speed;
+    camera.position.addScaledVector(flyUp, speed);
   }
   if (flyMovement.down) {
-    camera.position.y -= speed;
+    camera.position.addScaledVector(flyUp, -speed);
   }
 }
 
@@ -322,6 +353,55 @@ function onMovementKey(event, pressed) {
   }
 
   event.preventDefault();
+}
+
+function stopFlyLook() {
+  flyLookActive = false;
+  activePointerId = null;
+  renderer.domElement.classList.remove("is-fly-looking");
+}
+
+function startFlyLook(event) {
+  if (!flyModeEnabled || event.button !== 0) {
+    return;
+  }
+
+  flyLookActive = true;
+  activePointerId = event.pointerId;
+  lastPointerX = event.clientX;
+  lastPointerY = event.clientY;
+  renderer.domElement.classList.add("is-fly-looking");
+  if (renderer.domElement.setPointerCapture) {
+    renderer.domElement.setPointerCapture(event.pointerId);
+  }
+  event.preventDefault();
+}
+
+function updateFlyLook(event) {
+  if (!flyModeEnabled || !flyLookActive || event.pointerId !== activePointerId) {
+    return;
+  }
+
+  const deltaX = event.movementX || event.clientX - lastPointerX;
+  const deltaY = event.movementY || event.clientY - lastPointerY;
+  lastPointerX = event.clientX;
+  lastPointerY = event.clientY;
+
+  syncFlyEulerFromCamera();
+  flyEuler.y -= deltaX * 0.003;
+  flyEuler.x -= deltaY * 0.0022;
+  flyEuler.x = THREE.MathUtils.clamp(flyEuler.x, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05);
+  camera.quaternion.setFromEuler(flyEuler);
+}
+
+function endFlyLook(event) {
+  if (event.pointerId !== activePointerId) {
+    return;
+  }
+  if (renderer.domElement.releasePointerCapture) {
+    renderer.domElement.releasePointerCapture(event.pointerId);
+  }
+  stopFlyLook();
 }
 
 function applyCurrentRotation() {
@@ -717,16 +797,11 @@ refitCameraButton.addEventListener("click", () => {
   }
 });
 toggleFlyModeButton.addEventListener("click", () => {
-  if (flyControls.isLocked) {
-    flyControls.unlock();
-    return;
-  }
   if (!activeRunId) {
     editorStatus.textContent = "Open a run in the editor first.";
     return;
   }
-  flyControls.lock();
-  editorStatus.textContent = "Fly mode enabled. Use mouse look with W A S D, Q/E, and Shift.";
+  setFlyMode(!flyModeEnabled);
 });
 flipXButton.addEventListener("click", () => rotateCurrent("x", Math.PI));
 flipYButton.addEventListener("click", () => rotateCurrent("y", Math.PI));
@@ -750,14 +825,22 @@ for (const button of viewButtons) {
   button.addEventListener("click", () => setView(button.dataset.viewTarget));
 }
 
-flyControls.addEventListener("lock", onFlyLockChange);
-flyControls.addEventListener("unlock", onFlyLockChange);
+toggleRunInfoButton.addEventListener("click", () => {
+  setRunInfoVisible(!runInfoVisible);
+});
+renderer.domElement.addEventListener("pointerdown", startFlyLook);
+renderer.domElement.addEventListener("pointermove", updateFlyLook);
+renderer.domElement.addEventListener("pointerup", endFlyLook);
+renderer.domElement.addEventListener("pointercancel", endFlyLook);
+renderer.domElement.addEventListener("pointerleave", endFlyLook);
 window.addEventListener("keydown", (event) => onMovementKey(event, true));
 window.addEventListener("keyup", (event) => onMovementKey(event, false));
+window.addEventListener("blur", stopFlyLook);
 window.addEventListener("resize", onResize);
 renderer.setAnimationLoop(animate);
 updateEditorMeta(null);
 updateDecimationValue();
+setRunInfoVisible(false);
 setProcessingState("Idle", "Enter a path and start a SHARP run.", "The app will keep this page focused on processing until the run completes.");
 onResize();
 

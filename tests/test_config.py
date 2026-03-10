@@ -20,6 +20,24 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.logging.level, "INFO")
             self.assertEqual(config.web.port, 4173)
 
+    def test_default_config_prefers_portable_runtime_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp_path = Path(temp_dir)
+            runtime_dir = tmp_path / "runtime"
+            runtime_models = runtime_dir / "models"
+            runtime_models.mkdir(parents=True)
+
+            executable_name = "run-sharp.exe" if sys.platform == "win32" else "run-sharp"
+            executable_path = runtime_dir / executable_name
+            executable_path.write_text("", encoding="utf-8")
+            checkpoint_path = runtime_models / "sharp_2572gikvuh.pt"
+            checkpoint_path.write_text("", encoding="utf-8")
+
+            config = SharpLabConfig.default(base_dir=tmp_path)
+
+            self.assertEqual(config.sharp.executable, executable_path.resolve())
+            self.assertEqual(config.sharp.checkpoint, checkpoint_path.resolve())
+
     def test_load_json_config_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             tmp_path = Path(temp_dir)

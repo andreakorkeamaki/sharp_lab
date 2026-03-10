@@ -10,8 +10,8 @@
     "level": "INFO"
   },
   "sharp": {
-    "executable": "/Users/andreakorkeamaki/Desktop/ml-sharp/run-sharp",
-    "checkpoint": "/Users/andreakorkeamaki/Desktop/ml-sharp/models/sharp_2572gikvuh.pt",
+    "executable": "./runtime/run-sharp",
+    "checkpoint": "./runtime/models/sharp_2572gikvuh.pt",
     "default_device": "cpu"
   },
   "web": {

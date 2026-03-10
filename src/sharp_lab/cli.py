@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
+import sys
 import threading
 import webbrowser
 
@@ -57,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = _resolve_argv(argv)
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -115,6 +118,32 @@ def main(argv: list[str] | None = None) -> int:
 
     LOGGER.error("Unknown command: %s", args.command)
     return 1
+
+
+def _resolve_argv(
+    argv: list[str] | None,
+    runtime_argv: list[str] | None = None,
+    frozen: bool | None = None,
+) -> list[str]:
+    if argv is not None:
+        return argv
+
+    resolved_runtime_argv = list(runtime_argv) if runtime_argv is not None else sys.argv[1:]
+    if resolved_runtime_argv:
+        return resolved_runtime_argv
+
+    if _should_default_to_studio(frozen=frozen):
+        return ["studio"]
+    return resolved_runtime_argv
+
+
+def _should_default_to_studio(frozen: bool | None = None) -> bool:
+    default_command = os.environ.get("SHARP_LAB_DEFAULT_COMMAND", "").strip().lower()
+    if default_command == "studio":
+        return True
+    if frozen is None:
+        frozen = bool(getattr(sys, "frozen", False))
+    return frozen
 
 
 if __name__ == "__main__":

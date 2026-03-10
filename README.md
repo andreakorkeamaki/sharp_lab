@@ -44,13 +44,24 @@ For the simplest macOS or Windows install, download the latest release asset fro
 - `sharp-lab-macos.zip`
 - `sharp-lab-windows.zip`
 
-Unzip it and run:
+Unzip it and launch:
 
-```bash
-sharp-lab studio
+- Windows: double-click `Sharp Lab.exe`
+- macOS: open `Sharp Lab`
+
+The packaged app starts the local studio UI and opens it in your default browser automatically. Each release zip also includes `sharp_lab.example.json` so you can override paths without editing source code.
+
+If you want the GitHub download to include the SHARP runtime and checkpoint too, put them in a top-level `runtime/` folder before building the release:
+
+```text
+runtime/
+├── run-sharp          # macOS/Linux
+├── run-sharp.exe      # Windows
+└── models/
+    └── sharp_2572gikvuh.pt
 ```
 
-That starts the local web UI and opens it in your default browser automatically.
+When that folder exists, the release workflow bundles it into the downloadable zip and the app auto-detects it on launch.
 
 The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.0` builds:
 
@@ -85,8 +96,8 @@ runs = "./workspace/runs"
 level = "INFO"
 
 [sharp]
-executable = "/Users/andreakorkeamaki/Desktop/ml-sharp/run-sharp"
-checkpoint = "/Users/andreakorkeamaki/Desktop/ml-sharp/models/sharp_2572gikvuh.pt"
+executable = "./runtime/run-sharp"
+checkpoint = "./runtime/models/sharp_2572gikvuh.pt"
 default_device = "cpu"
 
 [web]
@@ -107,8 +118,8 @@ port = 4173
     "level": "INFO"
   },
   "sharp": {
-    "executable": "/Users/andreakorkeamaki/Desktop/ml-sharp/run-sharp",
-    "checkpoint": "/Users/andreakorkeamaki/Desktop/ml-sharp/models/sharp_2572gikvuh.pt",
+    "executable": "./runtime/run-sharp",
+    "checkpoint": "./runtime/models/sharp_2572gikvuh.pt",
     "default_device": "cpu"
   },
   "web": {
@@ -117,6 +128,8 @@ port = 4173
   }
 }
 ```
+
+On Windows, use `./runtime/run-sharp.exe` if you create a config file manually. The packaged app also checks for `run-sharp.exe` automatically.
 
 ## Core commands
 
