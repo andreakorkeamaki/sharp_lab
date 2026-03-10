@@ -72,6 +72,10 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/setup/download-checkpoint":
+            self._handle_download_checkpoint()
+            return
+
         if parsed.path == "/api/predict":
             self._handle_predict()
             return
@@ -179,6 +183,22 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json({"run": self._serialize_run(run)}, status=HTTPStatus.CREATED)
+
+    def _handle_download_checkpoint(self) -> None:
+        try:
+            checkpoint_path = self.server.app.sharp_service.download_default_checkpoint()
+        except Exception as exc:
+            LOGGER.exception("SHARP checkpoint download failed")
+            self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_json(
+            {
+                "checkpoint_path": str(checkpoint_path),
+                "sharp": self.server.app.sharp_status(),
+            },
+            status=HTTPStatus.CREATED,
+        )
 
     def _handle_decimate(self, path: str) -> None:
         parts = [part for part in path.split("/") if part]

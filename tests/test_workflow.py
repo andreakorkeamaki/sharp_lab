@@ -1,8 +1,10 @@
+import io
 import json
 import sys
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -99,6 +101,48 @@ printf 'fake sharp completed\n'
             records = SharpIntegrationService(runs_dir=tmp_path / "runs").list_runs()
             self.assertEqual(len(records), 1)
             self.assertEqual(records[0].run_id, run.run_id)
+
+    def test_installation_status_marks_missing_checkpoint_as_auto_download(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp_path = Path(temp_dir)
+            fake_sharp = tmp_path / "run-sharp"
+            fake_sharp.write_text("#!/bin/sh\n", encoding="utf-8")
+            fake_sharp.chmod(0o755)
+
+            status = SharpIntegrationService(
+                runs_dir=tmp_path / "runs",
+                executable=fake_sharp,
+                checkpoint=None,
+                default_device="cpu",
+            ).installation_status()
+
+            self.assertTrue(status["executable_exists"])
+            self.assertFalse(status["checkpoint_exists"])
+            self.assertTrue(status["runtime_ready"])
+            self.assertEqual(status["checkpoint_mode"], "download-available")
+            self.assertTrue(status["can_download_checkpoint"])
+            self.assertTrue(status["preferred_checkpoint"].endswith("models/sharp_2572gikvuh.pt"))
+
+    def test_download_default_checkpoint_saves_model_next_to_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp_path = Path(temp_dir)
+            fake_sharp = tmp_path / "run-sharp"
+            fake_sharp.write_text("#!/bin/sh\n", encoding="utf-8")
+            fake_sharp.chmod(0o755)
+
+            service = SharpIntegrationService(
+                runs_dir=tmp_path / "runs",
+                executable=fake_sharp,
+                checkpoint=None,
+                default_device="cpu",
+            )
+
+            with mock.patch("sharp_lab.sharp.integration.urlopen", return_value=io.BytesIO(b"fake-model-weights")):
+                checkpoint_path = service.download_default_checkpoint()
+
+            self.assertTrue(checkpoint_path.exists())
+            self.assertEqual(checkpoint_path.read_bytes(), b"fake-model-weights")
+            self.assertEqual(service.checkpoint, checkpoint_path.resolve())
 
     def test_sharp_decimate_creates_variant_and_updates_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

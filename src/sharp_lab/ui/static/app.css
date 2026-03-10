@@ -107,6 +107,23 @@ h1 {
   line-height: 1.55;
 }
 
+.setup-banner {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(19, 32, 43, 0.09);
+}
+
+.setup-banner h2 {
+  margin-top: 6px;
+  font-size: clamp(1.05rem, 1.6vw, 1.4rem);
+}
+
+.setup-banner .hint {
+  margin: 8px 0 0;
+}
+
 .status-strip,
 .meta-grid {
   margin: 0;

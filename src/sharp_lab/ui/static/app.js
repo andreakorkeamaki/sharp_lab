@@ -20,6 +20,9 @@ const progressBar = document.getElementById("progress-bar");
 const workspacePath = document.getElementById("workspace-path");
 const sharpStatus = document.getElementById("sharp-status");
 const checkpointStatus = document.getElementById("checkpoint-status");
+const setupTitle = document.getElementById("setup-title");
+const setupHint = document.getElementById("setup-hint");
+const downloadModelButton = document.getElementById("download-model");
 const runCount = document.getElementById("run-count");
 const latestRunTitle = document.getElementById("latest-run-title");
 const latestRunSummary = document.getElementById("latest-run-summary");
@@ -95,6 +98,7 @@ let currentRotation = new THREE.Euler(0, 0, 0, "XYZ");
 let activeRunId = null;
 let activeArtifactName = null;
 let currentRuns = [];
+let currentSharpConfig = null;
 let processingStartedAt = null;
 let processingTimerId = null;
 const flyMovement = {
@@ -479,6 +483,56 @@ function updateLatestRun(run) {
   openLatestRunButton.disabled = !run.viewer_urls?.length;
 }
 
+function describeSetup(sharp) {
+  if (!sharp.executable_exists) {
+    return {
+      runtime: "missing runtime",
+      checkpoint: "waiting for runtime",
+      title: "This download still needs the SHARP runtime",
+      hint: "Bundle run-sharp with the app in a runtime folder, or install the SHARP runtime on this machine before running predictions.",
+      canDownload: false,
+    };
+  }
+
+  if (sharp.checkpoint_mode === "download-required") {
+    return {
+      runtime: "ready",
+      checkpoint: "download required",
+      title: "The runtime is present, but the Apple model is not downloaded yet",
+      hint: `Download the Apple SHARP model into ${sharp.preferred_checkpoint} before running predictions.`,
+      canDownload: Boolean(sharp.can_download_checkpoint),
+    };
+  }
+
+  if (sharp.checkpoint_mode === "download-available" || sharp.checkpoint_mode === "auto-download") {
+    return {
+      runtime: "ready",
+      checkpoint: "download available",
+      title: "The SHARP runtime is ready",
+      hint: `Download the Apple model now and save it under ${sharp.preferred_checkpoint}, or let Apple SHARP fetch it automatically on the first prediction run and cache it under ${sharp.model_cache_dir}.`,
+      canDownload: Boolean(sharp.can_download_checkpoint),
+    };
+  }
+
+  if (sharp.checkpoint_mode === "configured-missing") {
+    return {
+      runtime: "ready",
+      checkpoint: "configured path missing",
+      title: "The runtime is present, but the checkpoint path is broken",
+      hint: "Update the checkpoint path in sharp_lab.json or bundle the model into runtime/models before shipping this app.",
+      canDownload: Boolean(sharp.can_download_checkpoint),
+    };
+  }
+
+  return {
+    runtime: "ready",
+    checkpoint: "bundled",
+    title: "The SHARP runtime and model are bundled locally",
+    hint: "This build already has the model available, so predictions can run without downloading the checkpoint first.",
+    canDownload: false,
+  };
+}
+
 function updateEditorMeta(run) {
   if (!run) {
     activeArtifactName = null;
@@ -594,9 +648,52 @@ async function fetchConfig() {
     throw new Error("Could not load config.");
   }
   const payload = await response.json();
+  currentSharpConfig = payload.sharp;
+  const setup = describeSetup(payload.sharp);
   workspacePath.textContent = payload.workspace;
-  sharpStatus.textContent = payload.sharp.executable_exists ? "ready" : "missing executable";
-  checkpointStatus.textContent = payload.sharp.checkpoint_exists ? "ready" : "missing checkpoint";
+  sharpStatus.textContent = setup.runtime;
+  checkpointStatus.textContent = setup.checkpoint;
+  setupTitle.textContent = setup.title;
+  setupHint.textContent = setup.hint;
+  downloadModelButton.hidden = !setup.canDownload || payload.sharp.checkpoint_exists;
+  downloadModelButton.disabled = !setup.canDownload || payload.sharp.checkpoint_exists;
+  downloadModelButton.textContent = "Download Apple Model";
+}
+
+async function downloadModel() {
+  downloadModelButton.disabled = true;
+  downloadModelButton.textContent = "Downloading...";
+  setupTitle.textContent = "Downloading the Apple SHARP model";
+  setupHint.textContent = currentSharpConfig?.preferred_checkpoint
+    ? `Saving the checkpoint to ${currentSharpConfig.preferred_checkpoint}.`
+    : "Saving the checkpoint into the local runtime folder.";
+
+  try {
+    const response = await fetch("/api/setup/download-checkpoint", {
+      method: "POST",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not download the Apple SHARP model.");
+    }
+
+    await fetchConfig();
+    setProcessingState(
+      "Idle",
+      "Apple SHARP model downloaded.",
+      `Saved the checkpoint to ${payload.checkpoint_path}. You can now run predictions without waiting for the first-run model fetch.`,
+    );
+  } catch (error) {
+    console.error(error);
+    setupTitle.textContent = "Could not download the Apple SHARP model";
+    setupHint.textContent = error.message;
+    setProcessingState("Error", error.message, "Check your internet connection and try the model download again.");
+  } finally {
+    if (!downloadModelButton.hidden) {
+      downloadModelButton.disabled = false;
+      downloadModelButton.textContent = "Download Apple Model";
+    }
+  }
 }
 
 async function fetchRuns() {
@@ -820,6 +917,7 @@ artifactSelect.addEventListener("change", async () => {
 });
 decimationRatio.addEventListener("input", updateDecimationValue);
 decimateRunButton.addEventListener("click", decimateCurrentRun);
+downloadModelButton.addEventListener("click", downloadModel);
 
 for (const button of viewButtons) {
   button.addEventListener("click", () => setView(button.dataset.viewTarget));

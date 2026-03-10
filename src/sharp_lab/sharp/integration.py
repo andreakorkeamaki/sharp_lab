@@ -5,12 +5,17 @@ from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
+import shutil
 import subprocess
+import tempfile
 import time
+from urllib.request import urlopen
 
 from sharp_lab.sharp.ply import decimate_ply
 
 LOGGER = logging.getLogger(__name__)
+DEFAULT_MODEL_FILENAME = "sharp_2572gikvuh.pt"
+DEFAULT_MODEL_URL = "https://ml-site.cdn-apple.com/models/sharp/sharp_2572gikvuh.pt"
 
 
 @dataclass
@@ -78,13 +83,87 @@ class SharpIntegrationService:
     def installation_status(self) -> dict[str, object]:
         executable_exists = bool(self.executable and self.executable.exists())
         checkpoint_exists = bool(self.checkpoint and self.checkpoint.exists())
+        preferred_checkpoint = self.preferred_checkpoint_path()
+        can_download_checkpoint = executable_exists and preferred_checkpoint is not None
+        model_cache_dir = self.preferred_model_cache_dir()
+        checkpoint_mode = "bundled"
+        checkpoint_hint = "The bundled SHARP checkpoint is ready."
+        runtime_ready = executable_exists
+        predict_ready = executable_exists and (checkpoint_exists or self.checkpoint is None)
+
+        if not executable_exists:
+            checkpoint_mode = "runtime-missing"
+            checkpoint_hint = "Add the SHARP runtime before this app can run predictions."
+        elif checkpoint_exists:
+            checkpoint_mode = "bundled"
+            checkpoint_hint = "The SHARP checkpoint is bundled locally."
+        elif self.checkpoint is not None and can_download_checkpoint:
+            checkpoint_mode = "download-required"
+            checkpoint_hint = "Download the Apple SHARP model into the configured checkpoint path before predicting."
+        elif can_download_checkpoint:
+            checkpoint_mode = "download-available"
+            checkpoint_hint = (
+                "Download the Apple SHARP model now, or let the SHARP CLI download it automatically on the first run."
+            )
+        elif self.checkpoint is None:
+            checkpoint_mode = "auto-download"
+            checkpoint_hint = (
+                "The SHARP CLI will download the model checkpoint automatically on the first prediction run."
+            )
+        else:
+            checkpoint_mode = "configured-missing"
+            checkpoint_hint = "The configured checkpoint path does not exist."
+
         return {
             "executable": str(self.executable) if self.executable else None,
             "checkpoint": str(self.checkpoint) if self.checkpoint else None,
+            "preferred_checkpoint": str(preferred_checkpoint) if preferred_checkpoint else None,
             "executable_exists": executable_exists,
             "checkpoint_exists": checkpoint_exists,
+            "runtime_ready": runtime_ready,
+            "predict_ready": predict_ready,
+            "checkpoint_mode": checkpoint_mode,
+            "checkpoint_hint": checkpoint_hint,
+            "model_cache_dir": str(model_cache_dir),
+            "can_download_checkpoint": can_download_checkpoint,
+            "default_model_url": DEFAULT_MODEL_URL,
             "default_device": self.default_device,
         }
+
+    def preferred_checkpoint_path(self) -> Path | None:
+        if self.checkpoint is not None:
+            return self.checkpoint.resolve()
+        if self.executable is None:
+            return None
+        return (self.executable.resolve().parent / "models" / DEFAULT_MODEL_FILENAME).resolve()
+
+    def preferred_model_cache_dir(self) -> Path:
+        if self.executable is None:
+            return (Path.home() / ".cache" / "torch" / "hub" / "checkpoints").resolve()
+        return (self.executable.resolve().parent / ".cache" / "torch" / "hub" / "checkpoints").resolve()
+
+    def download_default_checkpoint(self, url: str = DEFAULT_MODEL_URL) -> Path:
+        if self.executable is None or not self.executable.exists():
+            raise RuntimeError("The SHARP runtime is not installed on this machine yet.")
+
+        target_path = self.preferred_checkpoint_path()
+        if target_path is None:
+            raise RuntimeError("Could not determine where to save the SHARP checkpoint.")
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=target_path.parent, delete=False) as handle:
+            temp_path = Path(handle.name)
+            try:
+                with urlopen(url) as response:
+                    shutil.copyfileobj(response, handle)
+            except Exception:
+                temp_path.unlink(missing_ok=True)
+                raise
+
+        temp_path.replace(target_path)
+        self.checkpoint = target_path.resolve()
+        LOGGER.info("Downloaded SHARP checkpoint to %s", self.checkpoint)
+        return self.checkpoint
 
     def predict(self, input_path: Path, device: str | None = None) -> SharpRunRecord:
         if self.runs_dir is None or self.executable is None:

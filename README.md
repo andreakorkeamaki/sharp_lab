@@ -51,7 +51,9 @@ Unzip it and launch:
 
 The packaged app starts the local studio UI and opens it in your default browser automatically. Each release zip also includes `sharp_lab.example.json` so you can override paths without editing source code.
 
-If you want the GitHub download to include the SHARP runtime and checkpoint too, put them in a top-level `runtime/` folder before building the release:
+The release workflow now builds a bundled `ml-sharp` runtime from the pinned Apple source revision and includes it in the release zip. The model checkpoint itself is still optional, because the app can download it during onboarding.
+
+If you want to prepare the runtime bundle manually instead, use a top-level `runtime/` folder before building the release:
 
 ```text
 runtime/
@@ -61,7 +63,9 @@ runtime/
     └── sharp_2572gikvuh.pt
 ```
 
-When that folder exists, the release workflow bundles it into the downloadable zip and the app auto-detects it on launch.
+When that folder exists, the release workflow bundles it into the downloadable zip and the app auto-detects it on launch. Otherwise the workflow creates the runtime bundle itself from `apple/ml-sharp`.
+
+If the SHARP executable is present but the checkpoint file is not bundled, the app now offers a first-run "Download Apple Model" action in the UI. You can also let the SHARP CLI download the checkpoint automatically on the first prediction run and cache it under `~/.cache/torch/hub/checkpoints/`.
 
 The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.0` builds:
 

@@ -47,9 +47,13 @@ jobs:
           python-version: "3.11"
 
       - name: Build standalone executable
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           python -m pip install .[release]
+          if [ ! -d runtime ]; then
+            python scripts/build_ml_sharp_runtime.py --runtime-dir runtime
+          fi
           pyinstaller sharp_lab.spec --noconfirm --clean
 
       - name: Archive standalone build
