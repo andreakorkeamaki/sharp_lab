@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import json
 import logging
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -151,14 +152,15 @@ class SharpIntegrationService:
             raise RuntimeError("Could not determine where to save the SHARP checkpoint.")
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=target_path.parent, delete=False) as handle:
-            temp_path = Path(handle.name)
-            try:
+        file_descriptor, temp_name = tempfile.mkstemp(dir=target_path.parent)
+        temp_path = Path(temp_name)
+        try:
+            with os.fdopen(file_descriptor, "wb") as handle:
                 with urlopen(url) as response:
                     shutil.copyfileobj(response, handle)
-            except Exception:
-                temp_path.unlink(missing_ok=True)
-                raise
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
 
         temp_path.replace(target_path)
         self.checkpoint = target_path.resolve()
