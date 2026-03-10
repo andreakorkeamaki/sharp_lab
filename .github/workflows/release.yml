@@ -35,10 +35,12 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            artifact_name: sharp-lab-macos
+            artifact_name_base: sharp-lab-macos
           - os: windows-latest
-            artifact_name: sharp-lab-windows
+            artifact_name_base: sharp-lab-windows
     runs-on: ${{ matrix.os }}
+    env:
+      RELEASE_ASSET_NAME: ${{ format('{0}-{1}', matrix.artifact_name_base, github.ref_name) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,10 +67,10 @@ jobs:
           from pathlib import Path
 
           dist_dir = Path("dist")
-          release_root = dist_dir / "${{ matrix.artifact_name }}"
+          release_root = dist_dir / "${{ env.RELEASE_ASSET_NAME }}"
           executable_name = "Sharp Lab.exe" if (dist_dir / "Sharp Lab.exe").exists() else "Sharp Lab"
           source = dist_dir / executable_name
-          archive = dist_dir / "${{ matrix.artifact_name }}.zip"
+          archive = dist_dir / "${{ env.RELEASE_ASSET_NAME }}.zip"
           if release_root.exists():
               shutil.rmtree(release_root)
           release_root.mkdir(parents=True)
@@ -94,8 +96,8 @@ jobs:
       - name: Upload standalone artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/${{ matrix.artifact_name }}.zip
+          name: ${{ env.RELEASE_ASSET_NAME }}
+          path: dist/${{ env.RELEASE_ASSET_NAME }}.zip
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -116,5 +118,5 @@ jobs:
         with:
           files: |
             release-artifacts/python-packages/*
-            release-artifacts/sharp-lab-macos/*
-            release-artifacts/sharp-lab-windows/*
+            release-artifacts/sharp-lab-macos-v*/*
+            release-artifacts/sharp-lab-windows-v*/*

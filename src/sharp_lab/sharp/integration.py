@@ -17,6 +17,8 @@ from sharp_lab.sharp.ply import decimate_ply
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MODEL_FILENAME = "sharp_2572gikvuh.pt"
 DEFAULT_MODEL_URL = "https://ml-site.cdn-apple.com/models/sharp/sharp_2572gikvuh.pt"
+WINDOWS_REPLACE_RETRIES = 10
+WINDOWS_REPLACE_DELAY_SECONDS = 0.35
 
 
 @dataclass
@@ -162,10 +164,33 @@ class SharpIntegrationService:
             temp_path.unlink(missing_ok=True)
             raise
 
-        temp_path.replace(target_path)
+        self._replace_checkpoint_file(temp_path, target_path)
         self.checkpoint = target_path.resolve()
         LOGGER.info("Downloaded SHARP checkpoint to %s", self.checkpoint)
         return self.checkpoint
+
+    def _replace_checkpoint_file(self, source_path: Path, target_path: Path) -> None:
+        attempts = WINDOWS_REPLACE_RETRIES if os.name == "nt" else 1
+        last_error: OSError | None = None
+
+        for attempt in range(attempts):
+            try:
+                os.replace(source_path, target_path)
+                return
+            except OSError as exc:
+                last_error = exc
+                if os.name != "nt":
+                    break
+                if attempt == attempts - 1:
+                    break
+                time.sleep(WINDOWS_REPLACE_DELAY_SECONDS)
+
+        source_path.unlink(missing_ok=True)
+        if last_error is not None:
+            raise RuntimeError(
+                f"Could not save the Apple SHARP model to {target_path}: {last_error}"
+            ) from last_error
+        raise RuntimeError(f"Could not save the Apple SHARP model to {target_path}.")
 
     def predict(self, input_path: Path, device: str | None = None) -> SharpRunRecord:
         if self.runs_dir is None or self.executable is None:

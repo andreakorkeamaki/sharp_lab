@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -143,6 +144,32 @@ printf 'fake sharp completed\n'
             self.assertTrue(checkpoint_path.exists())
             self.assertEqual(checkpoint_path.read_bytes(), b"fake-model-weights")
             self.assertEqual(service.checkpoint, checkpoint_path.resolve())
+
+    def test_replace_checkpoint_file_retries_after_transient_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp_path = Path(temp_dir)
+            service = SharpIntegrationService()
+            source_path = tmp_path / "checkpoint.part"
+            target_path = tmp_path / "sharp_2572gikvuh.pt"
+            source_path.write_bytes(b"weights")
+
+            attempts = {"count": 0}
+            original_replace = os.replace
+
+            def flaky_replace(source: Path, target: Path) -> None:
+                attempts["count"] += 1
+                if attempts["count"] < 3:
+                    raise PermissionError("WinError 32: locked")
+                original_replace(source, target)
+
+            with mock.patch("sharp_lab.sharp.integration.os.name", "nt"):
+                with mock.patch("sharp_lab.sharp.integration.os.replace", side_effect=flaky_replace):
+                    with mock.patch("sharp_lab.sharp.integration.time.sleep"):
+                        service._replace_checkpoint_file(source_path, target_path)
+
+            self.assertEqual(attempts["count"], 3)
+            self.assertTrue(target_path.exists())
+            self.assertEqual(target_path.read_bytes(), b"weights")
 
     def test_sharp_decimate_creates_variant_and_updates_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
