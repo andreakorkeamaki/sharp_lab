@@ -8,6 +8,8 @@ from pathlib import Path
 import subprocess
 import time
 
+from sharp_lab.sharp.ply import decimate_ply
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -25,6 +27,20 @@ class SharpRunRecord:
     duration_seconds: float
     log_path: str
     error: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class SharpDecimationRecord:
+    run_id: str
+    source_file: str
+    output_file: str
+    ratio: float
+    original_vertices: int
+    decimated_vertices: int
+    output_path: str
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -148,6 +164,19 @@ class SharpIntegrationService:
                 LOGGER.warning("Skipping unreadable run manifest %s: %s", manifest_path, exc)
         return records
 
+    def get_run(self, run_id: str) -> SharpRunRecord:
+        if self.runs_dir is None:
+            raise RuntimeError("SHARP runs directory is not configured.")
+
+        manifest_path = self.runs_dir / run_id / "run.json"
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise FileNotFoundError(f"Run manifest not found for {run_id}.") from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Run manifest is unreadable for {run_id}.") from exc
+        return SharpRunRecord(**payload)
+
     def artifact_path(self, run_id: str, filename: str) -> Path:
         if self.runs_dir is None:
             raise RuntimeError("SHARP runs directory is not configured.")
@@ -158,6 +187,39 @@ class SharpIntegrationService:
         if not candidate.exists() or not candidate.is_file():
             raise FileNotFoundError(f"Artifact not found: {filename}")
         return candidate
+
+    def decimate_run(
+        self,
+        run_id: str,
+        filename: str,
+        ratio: float,
+    ) -> tuple[SharpRunRecord, SharpDecimationRecord]:
+        run = self.get_run(run_id)
+        if filename not in run.ply_files:
+            raise FileNotFoundError(f"Run {run_id} does not contain {filename}.")
+
+        source_path = self.artifact_path(run_id, filename)
+        ratio_percent = round(ratio * 100, 2)
+        ratio_slug = str(int(ratio_percent)) if ratio_percent.is_integer() else str(ratio_percent).replace(".", "-")
+        output_name = f"{source_path.stem}-decimated-{ratio_slug}{source_path.suffix}"
+        output_path = source_path.with_name(output_name)
+        decimated = decimate_ply(source_path, output_path, ratio)
+
+        if output_name not in run.ply_files:
+            run.ply_files.append(output_name)
+            self._write_manifest(self.runs_dir / run_id, run)
+
+        decimation = SharpDecimationRecord(
+            run_id=run_id,
+            source_file=filename,
+            output_file=output_name,
+            ratio=ratio,
+            original_vertices=decimated.original_vertices,
+            decimated_vertices=decimated.decimated_vertices,
+            output_path=str(output_path.resolve()),
+        )
+        refreshed_run = self.get_run(run_id)
+        return refreshed_run, decimation
 
     def _create_run_id(self, input_path: Path) -> str:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

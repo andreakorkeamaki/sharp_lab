@@ -1,0 +1,97 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-python-packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[release]
+          python -m build
+
+      - name: Upload python packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-packages
+          path: dist/*
+
+  build-standalone:
+    needs: build-python-packages
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact_name: sharp-lab-macos
+          - os: windows-latest
+            artifact_name: sharp-lab-windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build standalone executable
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[release]
+          pyinstaller sharp_lab.spec --noconfirm --clean
+
+      - name: Archive standalone build
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          dist_dir = Path("dist")
+          executable_name = "sharp-lab.exe" if Path("dist/sharp-lab.exe").exists() else "sharp-lab"
+          source = dist_dir / executable_name
+          archive = dist_dir / "${{ matrix.artifact_name }}.zip"
+          with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
+              handle.write(source, arcname=source.name)
+          print(f"created {archive}")
+          PY
+
+      - name: Upload standalone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}.zip
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-python-packages
+      - build-standalone
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-artifacts/python-packages/*
+            release-artifacts/sharp-lab-macos/*
+            release-artifacts/sharp-lab-windows/*

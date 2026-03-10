@@ -42,5 +42,14 @@ class SharpLabApplication:
     def sharp_runs(self) -> list[SharpRunRecord]:
         return self.sharp_service.list_runs()
 
+    def sharp_decimate(
+        self,
+        run_id: str,
+        filename: str,
+        ratio: float,
+    ) -> tuple[SharpRunRecord, dict[str, object]]:
+        run, decimation = self.sharp_service.decimate_run(run_id, filename=filename, ratio=ratio)
+        return run, decimation.to_dict()
+
     def sharp_status(self) -> dict[str, object]:
         return self.sharp_service.installation_status()

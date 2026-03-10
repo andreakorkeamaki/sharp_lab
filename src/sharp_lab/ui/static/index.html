@@ -16,82 +16,242 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar">
-        <div class="hero">
+      <header class="masthead">
+        <div>
           <p class="eyebrow">sharp_lab</p>
           <h1>Local SHARP Studio</h1>
-          <p class="lede">Run Apple SHARP locally, save every run to disk, and inspect the resulting splats immediately in the browser.</p>
+          <p class="lede">Generate locally, browse your run history, then open a dedicated editor to inspect, orient, and export the result.</p>
         </div>
-
-        <section class="card">
-          <p class="label">Generate</p>
-          <label class="field-label" for="input-path">Input image or folder</label>
-          <input id="input-path" type="text" placeholder="/Users/you/Desktop/applesharp" spellcheck="false" />
-
-          <label class="field-label" for="device">Device</label>
-          <select id="device">
-            <option value="">Default</option>
-            <option value="cpu">CPU</option>
-            <option value="mps">MPS</option>
-            <option value="cuda">CUDA</option>
-          </select>
-
-          <div class="button-stack">
-            <button id="run-button" type="button">Create Splat</button>
-            <button id="refresh-runs" type="button" class="secondary">Refresh Runs</button>
-          </div>
-          <p id="run-status" class="hint">Ready.</p>
-        </section>
-
-        <section class="card">
-          <p class="label">Orientation</p>
-          <div class="transform-grid">
-            <button id="flip-x" type="button" class="secondary">Flip X</button>
-            <button id="flip-y" type="button" class="secondary">Flip Y</button>
-            <button id="flip-z" type="button" class="secondary">Flip Z</button>
-            <button id="turn-left" type="button" class="secondary">Turn Left</button>
-            <button id="turn-right" type="button" class="secondary">Turn Right</button>
-            <button id="reset-pose" type="button" class="secondary">Reset Pose</button>
-          </div>
-          <p class="hint">If the splat appears upside down or reversed, use these transforms. SHARP exports in an OpenCV camera convention.</p>
-        </section>
-
-        <section class="card">
-          <p class="label">Environment</p>
-          <dl class="meta-grid">
-            <div>
-              <dt>Workspace</dt>
-              <dd id="workspace-path">-</dd>
-            </div>
-            <div>
-              <dt>SHARP</dt>
-              <dd id="sharp-status">-</dd>
-            </div>
-            <div>
-              <dt>Checkpoint</dt>
-              <dd id="checkpoint-status">-</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section class="card runs-card">
-          <div class="runs-header">
-            <p class="label">Runs</p>
-            <p id="run-count" class="count-pill">0</p>
-          </div>
-          <div id="runs-list" class="runs-list"></div>
-        </section>
-      </aside>
-
-      <main class="viewer-shell">
-        <div class="viewer-topbar">
+        <dl class="status-strip">
           <div>
-            <p class="viewer-label">Current Scene</p>
-            <h2 id="viewer-title">No splat loaded</h2>
+            <dt>Workspace</dt>
+            <dd id="workspace-path">-</dd>
           </div>
-          <button id="refit-camera" type="button" class="secondary">Refit Camera</button>
-        </div>
-        <div id="canvas-wrap" class="canvas-wrap"></div>
+          <div>
+            <dt>SHARP</dt>
+            <dd id="sharp-status">-</dd>
+          </div>
+          <div>
+            <dt>Checkpoint</dt>
+            <dd id="checkpoint-status">-</dd>
+          </div>
+        </dl>
+      </header>
+
+      <nav class="view-nav" aria-label="Workspace views">
+        <button type="button" class="nav-chip active" data-view-target="process">Process</button>
+        <button type="button" class="nav-chip" data-view-target="runs">Runs</button>
+        <button type="button" class="nav-chip" data-view-target="editor">Editor</button>
+      </nav>
+
+      <main class="views">
+        <section id="view-process" class="view-panel active" data-view="process">
+          <div class="process-grid">
+            <section class="card card-accent">
+              <div class="section-heading">
+                <div>
+                  <p class="label">Generate</p>
+                  <h2>Create a new SHARP run</h2>
+                </div>
+              </div>
+
+              <label class="field-label" for="input-path">Input image or folder</label>
+              <input id="input-path" type="text" placeholder="/Users/you/Desktop/applesharp" spellcheck="false" />
+
+              <label class="field-label" for="device">Device</label>
+              <select id="device">
+                <option value="">Default</option>
+                <option value="cpu">CPU</option>
+                <option value="mps">MPS</option>
+                <option value="cuda">CUDA</option>
+              </select>
+
+              <div class="button-row">
+                <button id="run-button" type="button">Create Splat</button>
+                <button id="jump-to-runs" type="button" class="secondary">Browse Runs</button>
+              </div>
+
+              <p class="hint">Use this page only for processing. Editing controls are kept in a separate workspace after the run is ready.</p>
+            </section>
+
+            <section class="card processing-card">
+              <div class="section-heading">
+                <div>
+                  <p class="label">Processing</p>
+                  <h2 id="process-title">Ready to run</h2>
+                </div>
+                <div id="processing-badge" class="state-pill">Idle</div>
+              </div>
+
+              <div class="processing-state">
+                <div id="processing-spinner" class="spinner" hidden></div>
+                <div class="processing-copy">
+                  <p id="run-status" class="processing-message">Enter a path and start a SHARP run.</p>
+                  <p id="processing-detail" class="hint">The app will keep this page focused on processing until the run completes.</p>
+                </div>
+              </div>
+
+              <div class="progress-track" aria-hidden="true">
+                <div id="progress-bar" class="progress-bar"></div>
+              </div>
+
+              <dl class="meta-grid meta-grid-compact">
+                <div>
+                  <dt>State</dt>
+                  <dd id="processing-state-text">Idle</dd>
+                </div>
+                <div>
+                  <dt>Elapsed</dt>
+                  <dd id="processing-elapsed">00:00</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section class="card latest-card">
+              <div class="section-heading">
+                <div>
+                  <p class="label">Latest Run</p>
+                  <h2 id="latest-run-title">No run yet</h2>
+                </div>
+                <p id="run-count" class="count-pill">0</p>
+              </div>
+
+              <p id="latest-run-summary" class="hint">Your latest run will appear here with a shortcut into the editor.</p>
+              <div class="button-row">
+                <button id="open-latest-run" type="button" class="secondary" disabled>Open in Editor</button>
+                <button id="refresh-runs" type="button" class="secondary">Refresh Runs</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-runs" class="view-panel" data-view="runs">
+          <section class="card runs-card">
+            <div class="section-heading">
+              <div>
+                <p class="label">Runs</p>
+                <h2>Run history</h2>
+              </div>
+              <div class="button-row button-row-tight">
+                <button id="runs-refresh-top" type="button" class="secondary">Refresh</button>
+              </div>
+            </div>
+            <p class="hint">Open any completed run to jump straight into the editor. Failed runs keep their logs so you can inspect what happened.</p>
+            <div id="runs-list" class="runs-list"></div>
+          </section>
+        </section>
+
+        <section id="view-editor" class="view-panel" data-view="editor">
+          <div class="editor-grid">
+            <aside class="editor-sidebar">
+              <section class="card">
+                <div class="section-heading">
+                  <div>
+                    <p class="label">Editor</p>
+                    <h2 id="viewer-title">No splat loaded</h2>
+                  </div>
+                </div>
+                <p id="editor-status" class="hint">Choose a completed run from the Runs page to start editing.</p>
+                <dl class="meta-grid">
+                  <div>
+                    <dt>Run ID</dt>
+                    <dd id="editor-run-id">-</dd>
+                  </div>
+                  <div>
+                    <dt>Source</dt>
+                    <dd id="editor-source">-</dd>
+                  </div>
+                  <div>
+                    <dt>Output</dt>
+                    <dd id="editor-output">-</dd>
+                  </div>
+                  <div>
+                    <dt>Active File</dt>
+                    <dd id="editor-file">-</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section class="card">
+                <div class="section-heading">
+                  <div>
+                    <p class="label">Orientation</p>
+                    <h2>Scene transforms</h2>
+                  </div>
+                </div>
+                <div class="transform-grid">
+                  <button id="flip-x" type="button" class="secondary">Flip X</button>
+                  <button id="flip-y" type="button" class="secondary">Flip Y</button>
+                  <button id="flip-z" type="button" class="secondary">Flip Z</button>
+                  <button id="turn-left" type="button" class="secondary">Turn Left</button>
+                  <button id="turn-right" type="button" class="secondary">Turn Right</button>
+                  <button id="reset-pose" type="button" class="secondary">Reset Pose</button>
+                </div>
+                <p class="hint">These controls currently adjust the preview so you can inspect the splat from the right orientation before exporting.</p>
+              </section>
+
+              <section class="card">
+                <div class="section-heading">
+                  <div>
+                    <p class="label">Optimize</p>
+                    <h2>Decimate point density</h2>
+                  </div>
+                </div>
+                <label class="field-label" for="artifact-select">Active PLY</label>
+                <select id="artifact-select"></select>
+
+                <label class="field-label" for="decimation-ratio">Keep percent</label>
+                <div class="slider-row">
+                  <input id="decimation-ratio" type="range" min="10" max="90" step="10" value="50" />
+                  <span id="decimation-value" class="count-pill">50%</span>
+                </div>
+
+                <div class="button-stack">
+                  <button id="decimate-run" type="button">Create Decimated Copy</button>
+                </div>
+                <p id="decimation-hint" class="hint">This creates another `.ply` inside the same run folder and opens it in the editor.</p>
+              </section>
+
+              <section class="card">
+                <div class="section-heading">
+                  <div>
+                    <p class="label">Export</p>
+                    <h2>Take the file elsewhere</h2>
+                  </div>
+                </div>
+                <div class="button-stack">
+                  <button id="download-ply" type="button">Download Current PLY</button>
+                  <button id="copy-output-path" type="button" class="secondary">Copy Output Path</button>
+                  <button id="refit-camera" type="button" class="secondary">Refit Camera</button>
+                </div>
+                <p class="hint">Download the generated `.ply` and continue in tools like Blender. The downloaded file is the current run output.</p>
+              </section>
+
+              <section class="card">
+                <div class="section-heading">
+                  <div>
+                    <p class="label">Navigation</p>
+                    <h2>Fly through the scene</h2>
+                  </div>
+                </div>
+                <div class="button-stack">
+                  <button id="toggle-fly-mode" type="button" class="secondary">Enter Fly Mode</button>
+                </div>
+                <p class="hint" id="fly-mode-hint">Mouse look with `W A S D`, `Q/E` for down/up, and `Shift` to move faster. Press `Esc` to leave fly mode.</p>
+              </section>
+            </aside>
+
+            <section class="viewer-shell">
+              <div class="viewer-topbar">
+                <div>
+                  <p class="viewer-label">Viewport</p>
+                  <h2>Preview</h2>
+                </div>
+              </div>
+              <div id="canvas-wrap" class="canvas-wrap"></div>
+            </section>
+          </div>
+        </section>
       </main>
     </div>
 

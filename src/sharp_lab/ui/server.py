@@ -72,27 +72,15 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path != "/api/predict":
-            self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+        if parsed.path == "/api/predict":
+            self._handle_predict()
             return
 
-        payload = self._read_json()
-        input_path_raw = payload.get("input_path")
-        if not isinstance(input_path_raw, str) or not input_path_raw.strip():
-            self._send_json({"error": "input_path is required."}, status=HTTPStatus.BAD_REQUEST)
+        if parsed.path.startswith("/api/runs/") and parsed.path.endswith("/decimate"):
+            self._handle_decimate(parsed.path)
             return
 
-        device_raw = payload.get("device")
-        device = device_raw.strip() if isinstance(device_raw, str) and device_raw.strip() else None
-
-        try:
-            run = self.server.app.sharp_predict(Path(input_path_raw).expanduser(), device=device)
-        except Exception as exc:
-            LOGGER.exception("SHARP predict request failed")
-            self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
-            return
-
-        self._send_json({"run": self._serialize_run(run)}, status=HTTPStatus.CREATED)
+        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def log_message(self, format: str, *args: Any) -> None:
         LOGGER.info("%s - %s", self.client_address[0], format % args)
@@ -172,6 +160,63 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         if send_body:
             self.wfile.write(data)
+
+    def _handle_predict(self) -> None:
+        payload = self._read_json()
+        input_path_raw = payload.get("input_path")
+        if not isinstance(input_path_raw, str) or not input_path_raw.strip():
+            self._send_json({"error": "input_path is required."}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        device_raw = payload.get("device")
+        device = device_raw.strip() if isinstance(device_raw, str) and device_raw.strip() else None
+
+        try:
+            run = self.server.app.sharp_predict(Path(input_path_raw).expanduser(), device=device)
+        except Exception as exc:
+            LOGGER.exception("SHARP predict request failed")
+            self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_json({"run": self._serialize_run(run)}, status=HTTPStatus.CREATED)
+
+    def _handle_decimate(self, path: str) -> None:
+        parts = [part for part in path.split("/") if part]
+        if len(parts) != 4:
+            self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+            return
+
+        _, _, run_id, _ = parts
+        payload = self._read_json()
+        filename = payload.get("filename")
+        ratio_raw = payload.get("ratio")
+        if not isinstance(filename, str) or not filename.strip():
+            self._send_json({"error": "filename is required."}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            ratio = float(ratio_raw)
+        except (TypeError, ValueError):
+            self._send_json({"error": "ratio must be a number between 0 and 1."}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            run, decimation = self.server.app.sharp_decimate(run_id, filename=filename.strip(), ratio=ratio)
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        except FileNotFoundError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+            return
+        except Exception as exc:
+            LOGGER.exception("SHARP decimation request failed")
+            self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_json(
+            {"run": self._serialize_run(run), "decimation": decimation},
+            status=HTTPStatus.CREATED,
+        )
 
 
 def serve(app: SharpLabApplication, host: str, port: int) -> None:

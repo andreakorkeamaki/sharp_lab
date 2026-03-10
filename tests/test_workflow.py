@@ -99,3 +99,71 @@ printf 'fake sharp completed\n'
             records = SharpIntegrationService(runs_dir=tmp_path / "runs").list_runs()
             self.assertEqual(len(records), 1)
             self.assertEqual(records[0].run_id, run.run_id)
+
+    def test_sharp_decimate_creates_variant_and_updates_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp_path = Path(temp_dir)
+            run_dir = tmp_path / "runs" / "20260310T120000Z-sample"
+            output_dir = run_dir / "output"
+            output_dir.mkdir(parents=True)
+
+            ply_path = output_dir / "sample.ply"
+            ply_path.write_text(
+                "\n".join(
+                    [
+                        "ply",
+                        "format ascii 1.0",
+                        "element vertex 4",
+                        "property float x",
+                        "property float y",
+                        "property float z",
+                        "end_header",
+                        "0 0 0",
+                        "1 0 0",
+                        "2 0 0",
+                        "3 0 0",
+                    ]
+                )
+                + "\n",
+                encoding="ascii",
+            )
+
+            manifest_path = run_dir / "run.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "20260310T120000Z-sample",
+                        "input_path": str((tmp_path / "sample.jpg").resolve()),
+                        "output_dir": str(output_dir.resolve()),
+                        "ply_files": ["sample.ply"],
+                        "device": "cpu",
+                        "command": ["run-sharp", "predict"],
+                        "return_code": 0,
+                        "status": "completed",
+                        "created_at": "2026-03-10T12:00:00+00:00",
+                        "duration_seconds": 1.2,
+                        "log_path": str((run_dir / "sharp.log").resolve()),
+                        "error": None,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            service = SharpIntegrationService(runs_dir=tmp_path / "runs")
+            updated_run, decimation = service.decimate_run(
+                "20260310T120000Z-sample",
+                filename="sample.ply",
+                ratio=0.5,
+            )
+
+            self.assertEqual(decimation.output_file, "sample-decimated-50.ply")
+            self.assertEqual(decimation.original_vertices, 4)
+            self.assertEqual(decimation.decimated_vertices, 2)
+            self.assertEqual(updated_run.ply_files, ["sample.ply", "sample-decimated-50.ply"])
+
+            decimated_path = output_dir / "sample-decimated-50.ply"
+            self.assertTrue(decimated_path.exists())
+            decimated_lines = decimated_path.read_text(encoding="ascii").splitlines()
+            self.assertIn("element vertex 2", decimated_lines)
+            self.assertEqual(decimated_lines[-2:], ["0 0 0", "2 0 0"])

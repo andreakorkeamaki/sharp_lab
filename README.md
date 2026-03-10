@@ -10,6 +10,7 @@
 - Config file support with TOML or JSON
 - Structured logging setup
 - Local web UI for launching SHARP runs and previewing 3DGS output in the browser
+- Editor controls for orientation fixes, fly-through navigation, and PLY decimation copies
 - Test suite included for local verification
 - Clean default project layout for local asset workflows
 
@@ -35,6 +36,30 @@ sharp_lab/
 ```
 
 ## Installation
+
+### Download from GitHub releases
+
+For the simplest macOS or Windows install, download the latest release asset from GitHub:
+
+- `sharp-lab-macos.zip`
+- `sharp-lab-windows.zip`
+
+Unzip it and run:
+
+```bash
+sharp-lab studio
+```
+
+That starts the local web UI and opens it in your default browser automatically.
+
+The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.0` builds:
+
+- a source distribution
+- a wheel
+- a standalone macOS executable zip
+- a standalone Windows executable zip
+
+### Install from source
 
 ```bash
 cd sharp_lab
@@ -100,6 +125,7 @@ sharp-lab sharp status
 sharp-lab sharp predict --input /Users/andreakorkeamaki/Desktop/applesharp
 sharp-lab sharp runs
 sharp-lab web
+sharp-lab studio
 ```
 
 What these do:
@@ -112,6 +138,8 @@ What these do:
   - Lists previous local SHARP runs and their manifests.
 - `sharp-lab web`
   - Starts the local browser UI so you can run SHARP and inspect generated splats in one place.
+- `sharp-lab studio`
+  - Starts the local browser UI and opens it automatically in your default browser.
 
 ## Local web UI
 
@@ -134,6 +162,7 @@ The local UI can:
 - keep a `run.json` manifest and a `sharp.log` for each run
 - preview the generated `.ply` directly in the browser with Spark
 - apply quick orientation fixes when the splat appears upside down or mirrored
+- create decimated `.ply` copies for lighter exports while keeping the original run output
 
 This UI is local-first. SHARP inference still runs on your machine. The browser is only a frontend.
 

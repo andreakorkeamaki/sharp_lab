@@ -31,6 +31,10 @@ dependencies = []
 dev = [
   "pytest>=8.0"
 ]
+release = [
+  "build>=1.2",
+  "pyinstaller>=6.0"
+]
 
 [project.scripts]
 sharp-lab = "sharp_lab.cli:main"

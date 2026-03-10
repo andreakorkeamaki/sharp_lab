@@ -20,6 +20,10 @@ setup(
     extras_require={
         "dev": [
             "pytest>=8.0",
-        ]
+        ],
+        "release": [
+            "build>=1.2",
+            "pyinstaller>=6.0",
+        ],
     },
 )

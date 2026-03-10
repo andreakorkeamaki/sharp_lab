@@ -4,6 +4,8 @@ import argparse
 import json
 import logging
 from pathlib import Path
+import threading
+import webbrowser
 
 from sharp_lab.app import SharpLabApplication
 from sharp_lab.config import SharpLabConfig
@@ -44,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
     web_parser = subparsers.add_parser("web", help="Start the local sharp_lab web UI.")
     web_parser.add_argument("--host", help="Host to bind the web UI to.")
     web_parser.add_argument("--port", type=int, help="Port to bind the web UI to.")
+    web_parser.add_argument("--open-browser", action="store_true", help="Open the local UI in your default browser.")
+
+    studio_parser = subparsers.add_parser("studio", help="Start the local studio UI and open it in the browser.")
+    studio_parser.add_argument("--host", help="Host to bind the web UI to.")
+    studio_parser.add_argument("--port", type=int, help="Port to bind the web UI to.")
 
     subparsers.add_parser("config-path", help="Show the resolved config file path.")
     return parser
@@ -91,9 +98,13 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(app.sharp_status(), indent=2))
             return 0
 
-    if args.command == "web":
+    if args.command in {"web", "studio"}:
         host = args.host or config.web.host
         port = args.port or config.web.port
+        should_open_browser = args.command == "studio" or getattr(args, "open_browser", False)
+        if should_open_browser:
+            browser_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+            threading.Timer(0.8, lambda: webbrowser.open(f"http://{browser_host}:{port}")).start()
         serve_web_ui(app, host=host, port=port)
         return 0
 
