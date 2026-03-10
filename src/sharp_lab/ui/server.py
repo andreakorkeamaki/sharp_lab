@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import unquote, urlparse
 
 from sharp_lab.app import SharpLabApplication
 
@@ -35,14 +35,17 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/runs":
             self._send_json({"runs": [self._serialize_run(run) for run in self.server.app.sharp_runs()]}, send_body=False)
             return
+        if parsed.path == "/api/release":
+            self._send_json(self.server.app.release_status(), send_body=False)
+            return
         if parsed.path.startswith("/artifacts/"):
             self._serve_artifact(parsed.path, send_body=False)
             return
         if parsed.path.startswith("/assets/"):
             self._serve_static(parsed.path.removeprefix("/assets/"), send_body=False)
             return
-        if parsed.path in {"/", "/index.html"}:
-            self._serve_static("index.html", send_body=False)
+        if parsed.path in {"/", "/index.html", "/studio", "/setup"}:
+            self._serve_static(_resolve_page(self.server.app, parsed.path), send_body=False)
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
@@ -55,6 +58,9 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/runs":
             self._send_json({"runs": [self._serialize_run(run) for run in self.server.app.sharp_runs()]})
             return
+        if parsed.path == "/api/release":
+            self._send_json(self.server.app.release_status())
+            return
         if parsed.path == "/health":
             self._send_json({"status": "ok"})
             return
@@ -64,14 +70,17 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/assets/"):
             self._serve_static(parsed.path.removeprefix("/assets/"))
             return
-        if parsed.path in {"/", "/index.html"}:
-            self._serve_static("index.html")
+        if parsed.path in {"/", "/index.html", "/studio", "/setup"}:
+            self._serve_static(_resolve_page(self.server.app, parsed.path))
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/setup/install-runtime":
+            self._handle_install_runtime()
+            return
         if parsed.path == "/api/setup/download-checkpoint":
             self._handle_download_checkpoint()
             return
@@ -95,6 +104,7 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             "workspace": str(self.server.app.config.paths.workspace),
             "runs_dir": str(self.server.app.config.paths.runs),
             "sharp": status,
+            "release": self.server.app.release_status(),
             "web": {
                 "host": self.server.app.config.web.host,
                 "port": self.server.app.config.web.port,
@@ -200,6 +210,23 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             status=HTTPStatus.CREATED,
         )
 
+    def _handle_install_runtime(self) -> None:
+        try:
+            runtime_path = self.server.app.install_runtime()
+        except Exception as exc:
+            LOGGER.exception("SHARP runtime install failed")
+            self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_json(
+            {
+                "runtime_path": str(runtime_path),
+                "sharp": self.server.app.sharp_status(),
+                "release": self.server.app.release_status(),
+            },
+            status=HTTPStatus.CREATED,
+        )
+
     def _handle_decimate(self, path: str) -> None:
         parts = [part for part in path.split("/") if part]
         if len(parts) != 4:
@@ -263,3 +290,13 @@ def _guess_content_type(filename: str) -> str:
     if lower_name.endswith(".ply"):
         return "application/octet-stream"
     return "application/octet-stream"
+
+
+def _resolve_page(app: SharpLabApplication, path: str) -> str:
+    if path == "/setup":
+        return "setup.html"
+    if path == "/studio":
+        return "index.html"
+    if path == "/":
+        return "setup.html" if app.release.is_lite else "index.html"
+    return "index.html"

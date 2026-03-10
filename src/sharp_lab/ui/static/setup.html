@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sharp_lab Lite Setup</title>
+    <link rel="stylesheet" href="/assets/setup.css" />
+  </head>
+  <body>
+    <main class="setup-shell">
+      <section class="hero">
+        <p class="eyebrow">sharp_lab lite</p>
+        <h1>Install only what this machine needs.</h1>
+        <p class="lede">
+          This lighter build starts with setup first. Install the portable SHARP runtime, add the Apple model when you want it,
+          then launch the studio.
+        </p>
+        <div class="hero-actions">
+          <button id="install-runtime" type="button">Install Runtime</button>
+          <button id="download-model" type="button" class="secondary">Download Model</button>
+          <button id="open-studio" type="button" class="secondary">Open Studio</button>
+        </div>
+      </section>
+
+      <section class="status-grid">
+        <article class="status-card">
+          <p class="label">Build</p>
+          <h2 id="build-flavor">-</h2>
+          <p id="build-hint" class="hint">Checking release metadata.</p>
+        </article>
+
+        <article class="status-card accent">
+          <p class="label">Runtime</p>
+          <h2 id="runtime-status">-</h2>
+          <p id="runtime-hint" class="hint">Checking local runtime.</p>
+        </article>
+
+        <article class="status-card">
+          <p class="label">Model</p>
+          <h2 id="model-status">-</h2>
+          <p id="model-hint" class="hint">Checking model availability.</p>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="label">Setup</p>
+            <h2 id="activity-title">Ready</h2>
+          </div>
+          <p id="workspace-path" class="workspace-path">-</p>
+        </div>
+        <p id="activity-message" class="activity-message">Choose a step to prepare this machine.</p>
+        <p id="activity-detail" class="hint">The runtime installs into the app folder so the Lite build stays small until you need it.</p>
+      </section>
+    </main>
+
+    <script src="/assets/setup.js" type="module"></script>
+  </body>
+</html>

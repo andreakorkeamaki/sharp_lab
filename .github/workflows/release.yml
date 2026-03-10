@@ -35,12 +35,10 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            artifact_name_base: sharp-lab-macos
+            platform_slug: macos
           - os: windows-latest
-            artifact_name_base: sharp-lab-windows
+            platform_slug: windows
     runs-on: ${{ matrix.os }}
-    env:
-      RELEASE_ASSET_NAME: ${{ format('{0}-{1}', matrix.artifact_name_base, github.ref_name) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,44 +58,94 @@ jobs:
 
       - name: Archive standalone build
         shell: bash
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PLATFORM_SLUG: ${{ matrix.platform_slug }}
         run: |
           python - <<'PY'
+          import json
+          import os
           import shutil
           import zipfile
           from pathlib import Path
 
           dist_dir = Path("dist")
-          release_root = dist_dir / "${{ env.RELEASE_ASSET_NAME }}"
           executable_name = "Sharp Lab.exe" if (dist_dir / "Sharp Lab.exe").exists() else "Sharp Lab"
           source = dist_dir / executable_name
-          archive = dist_dir / "${{ env.RELEASE_ASSET_NAME }}.zip"
-          if release_root.exists():
-              shutil.rmtree(release_root)
-          release_root.mkdir(parents=True)
-
-          shutil.copy2(source, release_root / source.name)
-
-          for filename in ("README.md", "sharp_lab.example.json"):
-              path = Path(filename)
-              if path.exists():
-                  shutil.copy2(path, release_root / path.name)
-
           runtime_dir = Path("runtime")
-          if runtime_dir.exists():
-              shutil.copytree(runtime_dir, release_root / "runtime")
+          platform_slug = os.environ["PLATFORM_SLUG"]
+          ref_name = os.environ["GITHUB_REF_NAME"]
+          ref_type = os.environ["GITHUB_REF_TYPE"]
+          repository = os.environ["GITHUB_REPOSITORY"]
 
-          with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
-              for path in release_root.rglob("*"):
+          full_asset_name = f"sharp-lab-{platform_slug}-{ref_name}"
+          lite_asset_name = f"sharp-lab-{platform_slug}-lite-{ref_name}"
+          runtime_asset_name = f"sharp-lab-runtime-{platform_slug}-{ref_name}"
+          runtime_download_url = None
+          if ref_type == "tag":
+              runtime_download_url = f"https://github.com/{repository}/releases/download/{ref_name}/{runtime_asset_name}.zip"
+
+          def write_manifest(root: Path, build_flavor: str) -> None:
+              payload = {
+                  "build_flavor": build_flavor,
+                  "runtime_archive_url": runtime_download_url,
+                  "model_url": "https://ml-site.cdn-apple.com/models/sharp/sharp_2572gikvuh.pt",
+                  "studio_path": "/studio",
+                  "setup_path": "/setup",
+              }
+              (root / "sharp_lab.release.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+          def populate_common_files(root: Path) -> None:
+              root.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(source, root / source.name)
+              for filename in ("README.md", "sharp_lab.example.json"):
+                  path = Path(filename)
+                  if path.exists():
+                      shutil.copy2(path, root / path.name)
+
+          def make_archive(asset_name: str, include_runtime: bool, build_flavor: str) -> None:
+              release_root = dist_dir / asset_name
+              archive = dist_dir / f"{asset_name}.zip"
+              if release_root.exists():
+                  shutil.rmtree(release_root)
+              populate_common_files(release_root)
+              if include_runtime and runtime_dir.exists():
+                  shutil.copytree(runtime_dir, release_root / "runtime")
+              write_manifest(release_root, build_flavor)
+
+              with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
+                  for path in release_root.rglob("*"):
+                      if path.is_file():
+                          handle.write(path, arcname=path.relative_to(dist_dir))
+              print(f"created {archive}")
+
+          make_archive(full_asset_name, include_runtime=True, build_flavor="full")
+          make_archive(lite_asset_name, include_runtime=False, build_flavor="lite")
+
+          runtime_root = dist_dir / runtime_asset_name
+          runtime_archive = dist_dir / f"{runtime_asset_name}.zip"
+          if runtime_root.exists():
+              shutil.rmtree(runtime_root)
+          runtime_root.mkdir(parents=True)
+          if runtime_dir.exists():
+              shutil.copytree(runtime_dir, runtime_root / "runtime")
+          with zipfile.ZipFile(runtime_archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
+              for path in runtime_root.rglob("*"):
                   if path.is_file():
                       handle.write(path, arcname=path.relative_to(dist_dir))
-          print(f"created {archive}")
+          print(f"created {runtime_archive}")
           PY
 
       - name: Upload standalone artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.RELEASE_ASSET_NAME }}
-          path: dist/${{ env.RELEASE_ASSET_NAME }}.zip
+          name: sharp-lab-${{ matrix.platform_slug }}-bundles
+          path: |
+            dist/sharp-lab-${{ matrix.platform_slug }}-${{ github.ref_name }}.zip
+            dist/sharp-lab-${{ matrix.platform_slug }}-lite-${{ github.ref_name }}.zip
+            dist/sharp-lab-runtime-${{ matrix.platform_slug }}-${{ github.ref_name }}.zip
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -118,5 +166,5 @@ jobs:
         with:
           files: |
             release-artifacts/python-packages/*
-            release-artifacts/sharp-lab-macos-v*/*
-            release-artifacts/sharp-lab-windows-v*/*
+            release-artifacts/sharp-lab-macos-bundles/*
+            release-artifacts/sharp-lab-windows-bundles/*

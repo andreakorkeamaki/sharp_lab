@@ -19,6 +19,9 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.paths.runs, (tmp_path / "workspace" / "runs").resolve())
             self.assertEqual(config.logging.level, "INFO")
             self.assertEqual(config.web.port, 4173)
+            expected_executable = tmp_path / "runtime" / ("run-sharp.exe" if sys.platform == "win32" else "run-sharp")
+            self.assertEqual(config.sharp.executable, expected_executable.resolve())
+            self.assertEqual(config.base_dir, tmp_path.resolve())
 
     def test_default_config_prefers_portable_runtime_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

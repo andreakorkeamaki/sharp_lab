@@ -50,6 +50,7 @@ class SharpLabConfig:
     logging: LoggingConfig
     sharp: SharpConfig
     web: WebConfig
+    base_dir: Path
     config_file: Path | None = None
 
     @classmethod
@@ -72,6 +73,7 @@ class SharpLabConfig:
                 default_device="cpu",
             ),
             web=WebConfig(),
+            base_dir=root,
             config_file=None,
         )
 
@@ -123,6 +125,7 @@ class SharpLabConfig:
                 host=str(web_section.get("host", default_config.web.host)),
                 port=int(web_section.get("port", default_config.web.port)),
             ),
+            base_dir=root,
             config_file=resolved_path.resolve(),
         )
 
@@ -184,10 +187,10 @@ def _load_config_data(config_path: Path) -> dict[str, object]:
 def _default_sharp_paths(root: Path) -> tuple[Path, Path | None]:
     bundled_root = root / BUNDLED_RUNTIME_DIR
     default_sharp_root = Path.home() / "Desktop" / "ml-sharp"
-
-    executable = _first_existing_path(_bundled_executable_candidates(root, bundled_root))
+    bundled_candidates = _bundled_executable_candidates(root, bundled_root)
+    executable = _first_existing_path(bundled_candidates)
     if executable is None:
-        executable = default_sharp_root / _legacy_executable_name()
+        executable = bundled_candidates[0]
 
     checkpoint = _first_existing_path(_bundled_checkpoint_candidates(root, bundled_root))
     if checkpoint is None:
@@ -211,12 +214,6 @@ def _bundled_checkpoint_candidates(root: Path, bundled_root: Path) -> list[Path]
         root,
     )
     return [directory / checkpoint_name for directory in search_dirs for checkpoint_name in CHECKPOINT_FILENAMES]
-
-
-def _legacy_executable_name() -> str:
-    return "run-sharp.exe" if os.name == "nt" else "run-sharp"
-
-
 def _first_existing_path(candidates: list[Path]) -> Path | None:
     for candidate in candidates:
         if candidate.exists():

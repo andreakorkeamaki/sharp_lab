@@ -6,6 +6,7 @@ from sharp_lab.config import SharpLabConfig
 from sharp_lab.discovery import ImageDiscoveryService
 from sharp_lab.export import ExportManager
 from sharp_lab.pipeline import PreprocessingPipeline
+from sharp_lab.release import ReleaseManifest, RuntimeInstallService
 from sharp_lab.sharp import SharpIntegrationService, SharpRunRecord
 
 
@@ -15,6 +16,8 @@ class SharpLabApplication:
     def __init__(self, config: SharpLabConfig) -> None:
         self.config = config
         self.config.ensure_directories()
+        self.release = ReleaseManifest.load(config.base_dir)
+        self.runtime_installer = RuntimeInstallService(config.base_dir)
         self.sharp_service = SharpIntegrationService(
             runs_dir=self.config.paths.runs,
             executable=self.config.sharp.executable,
@@ -53,3 +56,12 @@ class SharpLabApplication:
 
     def sharp_status(self) -> dict[str, object]:
         return self.sharp_service.installation_status()
+
+    def release_status(self) -> dict[str, object]:
+        return self.release.to_dict()
+
+    def install_runtime(self) -> Path:
+        runtime_archive_url = self.release.runtime_archive_url
+        if not runtime_archive_url:
+            raise RuntimeError("This build does not declare a runtime download URL.")
+        return self.runtime_installer.install_from_url(runtime_archive_url)

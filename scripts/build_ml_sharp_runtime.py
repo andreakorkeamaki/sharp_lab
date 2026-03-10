@@ -53,6 +53,16 @@ def sharp_entrypoint(venv_dir: Path) -> Path:
 
 
 def write_launchers(runtime_dir: Path) -> None:
+    bootstrap = runtime_dir / "sharp_bootstrap.py"
+    bootstrap.write_text(
+        """from sharp.cli import main_cli
+
+if __name__ == "__main__":
+    main_cli()
+""",
+        encoding="utf-8",
+    )
+
     posix_launcher = runtime_dir / "run-sharp"
     posix_launcher.write_text(
         """#!/bin/sh
@@ -64,7 +74,7 @@ export XDG_CACHE_HOME="$RUNTIME_DIR/.cache"
 export TORCH_HOME="$RUNTIME_DIR/.cache/torch"
 export MPLCONFIGDIR="$RUNTIME_DIR/.cache/matplotlib"
 
-exec "$VENV_DIR/bin/sharp" "$@"
+exec "$VENV_DIR/bin/python" "$RUNTIME_DIR/sharp_bootstrap.py" "$@"
 """,
         encoding="utf-8",
     )
@@ -81,7 +91,7 @@ set "XDG_CACHE_HOME=%RUNTIME_DIR%\\.cache"
 set "TORCH_HOME=%RUNTIME_DIR%\\.cache\\torch"
 set "MPLCONFIGDIR=%RUNTIME_DIR%\\.cache\\matplotlib"
 
-"%VENV_DIR%\\Scripts\\sharp.exe" %*
+"%VENV_DIR%\\Scripts\\python.exe" "%RUNTIME_DIR%\\sharp_bootstrap.py" %*
 """,
         encoding="utf-8",
     )
