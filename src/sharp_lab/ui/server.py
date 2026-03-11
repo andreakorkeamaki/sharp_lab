@@ -38,6 +38,14 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/release":
             self._send_json(self.server.app.release_status(), send_body=False)
             return
+        if parsed.path.startswith("/api/setup/downloads/"):
+            try:
+                payload = self._download_status_payload(parsed.path)
+            except FileNotFoundError:
+                self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+                return
+            self._send_json(payload, send_body=False)
+            return
         if parsed.path.startswith("/artifacts/"):
             self._serve_artifact(parsed.path, send_body=False)
             return
@@ -60,6 +68,14 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/release":
             self._send_json(self.server.app.release_status())
+            return
+        if parsed.path.startswith("/api/setup/downloads/"):
+            try:
+                payload = self._download_status_payload(parsed.path)
+            except FileNotFoundError:
+                self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+                return
+            self._send_json(payload)
             return
         if parsed.path == "/health":
             self._send_json({"status": "ok"})
@@ -196,7 +212,7 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_download_checkpoint(self) -> None:
         try:
-            checkpoint_path = self.server.app.sharp_service.download_default_checkpoint()
+            task = self.server.app.start_model_download()
         except Exception as exc:
             LOGGER.exception("SHARP checkpoint download failed")
             self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -204,15 +220,15 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
 
         self._send_json(
             {
-                "checkpoint_path": str(checkpoint_path),
+                "task": task,
                 "sharp": self.server.app.sharp_status(),
             },
-            status=HTTPStatus.CREATED,
+            status=HTTPStatus.ACCEPTED,
         )
 
     def _handle_install_runtime(self) -> None:
         try:
-            runtime_path = self.server.app.install_runtime()
+            task = self.server.app.start_runtime_install()
         except Exception as exc:
             LOGGER.exception("SHARP runtime install failed")
             self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -220,11 +236,11 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
 
         self._send_json(
             {
-                "runtime_path": str(runtime_path),
+                "task": task,
                 "sharp": self.server.app.sharp_status(),
                 "release": self.server.app.release_status(),
             },
-            status=HTTPStatus.CREATED,
+            status=HTTPStatus.ACCEPTED,
         )
 
     def _handle_decimate(self, path: str) -> None:
@@ -264,6 +280,16 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             {"run": self._serialize_run(run), "decimation": decimation},
             status=HTTPStatus.CREATED,
         )
+
+    def _download_status_payload(self, path: str) -> dict[str, object]:
+        kind = path.removeprefix("/api/setup/downloads/").strip("/")
+        if kind not in {"runtime", "model"}:
+            raise FileNotFoundError(f"Unknown download kind: {kind}")
+        return {
+            "task": self.server.app.download_status(kind),
+            "sharp": self.server.app.sharp_status(),
+            "release": self.server.app.release_status(),
+        }
 
 
 def serve(app: SharpLabApplication, host: str, port: int) -> None:

@@ -10,8 +10,8 @@ import shutil
 import subprocess
 import tempfile
 import time
-from urllib.request import urlopen
 
+from sharp_lab.downloads import ProgressCallback, download_to_path
 from sharp_lab.sharp.ply import decimate_ply
 
 LOGGER = logging.getLogger(__name__)
@@ -145,7 +145,11 @@ class SharpIntegrationService:
             return (Path.home() / ".cache" / "torch" / "hub" / "checkpoints").resolve()
         return (self.executable.resolve().parent / ".cache" / "torch" / "hub" / "checkpoints").resolve()
 
-    def download_default_checkpoint(self, url: str = DEFAULT_MODEL_URL) -> Path:
+    def download_default_checkpoint(
+        self,
+        url: str = DEFAULT_MODEL_URL,
+        progress_callback: ProgressCallback | None = None,
+    ) -> Path:
         if self.executable is None or not self.executable.exists():
             raise RuntimeError("The SHARP runtime is not installed on this machine yet.")
 
@@ -157,9 +161,8 @@ class SharpIntegrationService:
         file_descriptor, temp_name = tempfile.mkstemp(dir=target_path.parent)
         temp_path = Path(temp_name)
         try:
-            with os.fdopen(file_descriptor, "wb") as handle:
-                with urlopen(url) as response:
-                    shutil.copyfileobj(response, handle)
+            os.close(file_descriptor)
+            download_to_path(url, temp_path, progress_callback=progress_callback)
         except Exception:
             temp_path.unlink(missing_ok=True)
             raise

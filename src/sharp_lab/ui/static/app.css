@@ -124,6 +124,15 @@ h1 {
   margin: 8px 0 0;
 }
 
+.setup-download-progress {
+  margin-top: 12px;
+}
+
+.progress-track-compact {
+  margin-top: 0;
+  height: 8px;
+}
+
 .status-strip,
 .meta-grid {
   margin: 0;
@@ -391,6 +400,12 @@ input[type="range"] {
   border-radius: inherit;
   background: linear-gradient(90deg, rgba(195, 92, 54, 0.35), var(--accent));
   transition: transform 180ms ease;
+}
+
+.progress-bar.is-indeterminate {
+  width: 34%;
+  transform: translateX(-110%);
+  animation: progress-slide 1.2s ease-in-out infinite;
 }
 
 .meta-grid-compact {
@@ -790,6 +805,20 @@ input[type="range"] {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  50% {
+    transform: translateX(120%);
+  }
+
+  100% {
+    transform: translateX(260%);
   }
 }
 

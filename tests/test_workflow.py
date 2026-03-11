@@ -15,6 +15,18 @@ from sharp_lab.pipeline import PreprocessingPipeline
 from sharp_lab.sharp import SharpIntegrationService
 
 
+class FakeDownloadResponse(io.BytesIO):
+    def __init__(self, payload: bytes) -> None:
+        super().__init__(payload)
+        self.headers = {"Content-Length": str(len(payload))}
+
+    def __enter__(self) -> "FakeDownloadResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+
 class WorkflowTests(unittest.TestCase):
     def test_end_to_end_asset_flow(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -138,7 +150,10 @@ printf 'fake sharp completed\n'
                 default_device="cpu",
             )
 
-            with mock.patch("sharp_lab.sharp.integration.urlopen", return_value=io.BytesIO(b"fake-model-weights")):
+            with mock.patch(
+                "sharp_lab.downloads.urlopen",
+                return_value=FakeDownloadResponse(b"fake-model-weights"),
+            ):
                 checkpoint_path = service.download_default_checkpoint()
 
             self.assertTrue(checkpoint_path.exists())

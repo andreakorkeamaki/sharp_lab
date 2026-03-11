@@ -25,6 +25,12 @@
             <p class="label">Setup</p>
             <h2 id="setup-title">Checking local SHARP runtime</h2>
             <p id="setup-hint" class="hint">The app will tell you whether the runtime is bundled, whether the model auto-downloads, or whether setup is still missing.</p>
+            <div class="setup-download-progress">
+              <div class="progress-track progress-track-compact" aria-hidden="true">
+                <div id="setup-download-progress-bar" class="progress-bar"></div>
+              </div>
+              <p id="setup-download-progress-text" class="hint">No model download in progress.</p>
+            </div>
             <div class="button-row button-row-tight">
               <button id="download-model" type="button" class="secondary" hidden>Download Apple Model</button>
             </div>

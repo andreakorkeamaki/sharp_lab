@@ -22,6 +22,8 @@ const sharpStatus = document.getElementById("sharp-status");
 const checkpointStatus = document.getElementById("checkpoint-status");
 const setupTitle = document.getElementById("setup-title");
 const setupHint = document.getElementById("setup-hint");
+const setupDownloadProgressBar = document.getElementById("setup-download-progress-bar");
+const setupDownloadProgressText = document.getElementById("setup-download-progress-text");
 const downloadModelButton = document.getElementById("download-model");
 const runCount = document.getElementById("run-count");
 const latestRunTitle = document.getElementById("latest-run-title");
@@ -99,6 +101,7 @@ let activeRunId = null;
 let activeArtifactName = null;
 let currentRuns = [];
 let currentSharpConfig = null;
+let modelDownloadPoller = null;
 let processingStartedAt = null;
 let processingTimerId = null;
 const flyMovement = {
@@ -642,6 +645,109 @@ function renderRuns(runs) {
   }
 }
 
+function formatDownloadBytes(value) {
+  if (value == null) {
+    return "";
+  }
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  const units = ["KB", "MB", "GB"];
+  let size = value / 1024;
+  let unit = units[0];
+  for (const nextUnit of units) {
+    unit = nextUnit;
+    if (size < 1024 || nextUnit === units[units.length - 1]) {
+      break;
+    }
+    size /= 1024;
+  }
+  return `${size.toFixed(size >= 100 ? 0 : 1)} ${unit}`;
+}
+
+function renderSetupDownloadTask(task) {
+  setupDownloadProgressBar.classList.remove("is-indeterminate");
+
+  if (!task || task.status === "idle") {
+    setupDownloadProgressBar.style.transform = "scaleX(0)";
+    setupDownloadProgressText.textContent = "No model download in progress.";
+    return;
+  }
+
+  if (task.status === "running") {
+    if (task.percent != null) {
+      setupDownloadProgressBar.style.transform = `scaleX(${task.percent / 100})`;
+      setupDownloadProgressText.textContent = `${task.percent}% · ${formatDownloadBytes(task.bytes_downloaded)} / ${formatDownloadBytes(task.total_bytes)}`;
+      return;
+    }
+
+    setupDownloadProgressBar.style.transform = "scaleX(1)";
+    setupDownloadProgressBar.classList.add("is-indeterminate");
+    setupDownloadProgressText.textContent = task.bytes_downloaded
+      ? `${formatDownloadBytes(task.bytes_downloaded)} downloaded`
+      : "Starting download...";
+    return;
+  }
+
+  setupDownloadProgressBar.style.transform = task.status === "completed" ? "scaleX(1)" : "scaleX(0)";
+  setupDownloadProgressText.textContent = task.status === "completed"
+    ? (task.total_bytes ? `${formatDownloadBytes(task.total_bytes)} downloaded` : "Download completed.")
+    : (task.error || task.message || "Download failed.");
+}
+
+async function fetchModelDownloadTask() {
+  const response = await fetch("/api/setup/downloads/model");
+  if (!response.ok) {
+    throw new Error("Could not load model download progress.");
+  }
+  const payload = await response.json();
+  renderSetupDownloadTask(payload.task);
+  return payload.task;
+}
+
+function stopModelDownloadPolling() {
+  if (modelDownloadPoller) {
+    window.clearInterval(modelDownloadPoller);
+    modelDownloadPoller = null;
+  }
+}
+
+function startModelDownloadPolling() {
+  stopModelDownloadPolling();
+  downloadModelButton.disabled = true;
+  const runner = async () => {
+    try {
+      const task = await fetchModelDownloadTask();
+      if (task.status !== "running") {
+        stopModelDownloadPolling();
+        await fetchConfig();
+        if (task.status === "completed") {
+          setProcessingState(
+            "Idle",
+            "Apple SHARP model downloaded.",
+            `Saved the checkpoint to ${task.result_path}. You can now run predictions without waiting for the first-run model fetch.`,
+          );
+          setupTitle.textContent = "Apple SHARP model ready";
+          setupHint.textContent = `Saved the checkpoint to ${task.result_path}.`;
+        } else if (task.status === "failed") {
+          setupTitle.textContent = "Could not download the Apple SHARP model";
+          setupHint.textContent = task.error || task.message;
+          setProcessingState("Error", task.error || task.message, "Check your internet connection and try the model download again.");
+        }
+      } else {
+        setupTitle.textContent = "Downloading the Apple SHARP model";
+        setupHint.textContent = task.message;
+      }
+    } catch (error) {
+      console.error(error);
+      stopModelDownloadPolling();
+    }
+  };
+
+  runner();
+  modelDownloadPoller = window.setInterval(runner, 700);
+}
+
 async function fetchConfig() {
   const response = await fetch("/api/config");
   if (!response.ok) {
@@ -676,23 +782,13 @@ async function downloadModel() {
     if (!response.ok) {
       throw new Error(payload.error || "Could not download the Apple SHARP model.");
     }
-
-    await fetchConfig();
-    setProcessingState(
-      "Idle",
-      "Apple SHARP model downloaded.",
-      `Saved the checkpoint to ${payload.checkpoint_path}. You can now run predictions without waiting for the first-run model fetch.`,
-    );
+    renderSetupDownloadTask(payload.task);
+    startModelDownloadPolling();
   } catch (error) {
     console.error(error);
     setupTitle.textContent = "Could not download the Apple SHARP model";
     setupHint.textContent = error.message;
     setProcessingState("Error", error.message, "Check your internet connection and try the model download again.");
-  } finally {
-    if (!downloadModelButton.hidden) {
-      downloadModelButton.disabled = false;
-      downloadModelButton.textContent = "Download Apple Model";
-    }
   }
 }
 
@@ -945,6 +1041,10 @@ onResize();
 (async function bootstrap() {
   try {
     await fetchConfig();
+    const modelTask = await fetchModelDownloadTask();
+    if (modelTask.status === "running") {
+      startModelDownloadPolling();
+    }
     await fetchRuns();
   } catch (error) {
     console.error(error);

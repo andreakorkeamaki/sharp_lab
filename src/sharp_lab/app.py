@@ -4,6 +4,7 @@ from pathlib import Path
 
 from sharp_lab.config import SharpLabConfig
 from sharp_lab.discovery import ImageDiscoveryService
+from sharp_lab.downloads import DownloadTaskManager
 from sharp_lab.export import ExportManager
 from sharp_lab.pipeline import PreprocessingPipeline
 from sharp_lab.release import ReleaseManifest, RuntimeInstallService
@@ -18,6 +19,7 @@ class SharpLabApplication:
         self.config.ensure_directories()
         self.release = ReleaseManifest.load(config.base_dir)
         self.runtime_installer = RuntimeInstallService(config.base_dir)
+        self.downloads = DownloadTaskManager()
         self.sharp_service = SharpIntegrationService(
             runs_dir=self.config.paths.runs,
             executable=self.config.sharp.executable,
@@ -61,7 +63,27 @@ class SharpLabApplication:
         return self.release.to_dict()
 
     def install_runtime(self) -> Path:
-        runtime_archive_url = self.release.runtime_archive_url
-        if not runtime_archive_url:
-            raise RuntimeError("This build does not declare a runtime download URL.")
-        return self.runtime_installer.install_from_url(runtime_archive_url)
+        return self.runtime_installer.install_from_manifest(self.release)
+
+    def start_runtime_install(self) -> dict[str, object]:
+        task = self.downloads.start(
+            "runtime",
+            start_message="Starting runtime installation.",
+            worker=lambda reporter: self.runtime_installer.install_from_manifest(
+                self.release,
+                progress_callback=reporter.download,
+                status_callback=reporter.status,
+            ),
+        )
+        return task.to_dict()
+
+    def start_model_download(self) -> dict[str, object]:
+        task = self.downloads.start(
+            "model",
+            start_message="Starting model download.",
+            worker=lambda reporter: self.sharp_service.download_default_checkpoint(progress_callback=reporter.download),
+        )
+        return task.to_dict()
+
+    def download_status(self, kind: str) -> dict[str, object]:
+        return self.downloads.get(kind).to_dict()

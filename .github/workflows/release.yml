@@ -88,9 +88,23 @@ jobs:
               runtime_download_url = f"https://github.com/{repository}/releases/download/{ref_name}/{runtime_asset_name}.zip"
 
           def write_manifest(root: Path, build_flavor: str) -> None:
+              runtime_install_mode = "archive"
+              runtime_archive = runtime_download_url
+              python_nuget_url = None
+              if build_flavor == "lite" and platform_slug == "windows":
+                  runtime_install_mode = "windows-local"
+                  runtime_archive = None
+                  python_nuget_url = "https://aka.ms/nugetclidl"
               payload = {
                   "build_flavor": build_flavor,
-                  "runtime_archive_url": runtime_download_url,
+                  "runtime_install_mode": runtime_install_mode,
+                  "runtime_archive_url": runtime_archive,
+                  "python_nuget_url": python_nuget_url,
+                  "python_package": "python",
+                  "python_version": "3.11.9",
+                  "sharp_source_url": "https://github.com/apple/ml-sharp/archive/1eaa046834b81852261262b41b0919f5c1efdd2e.zip",
+                  "sharp_repo_url": "https://github.com/apple/ml-sharp.git",
+                  "sharp_repo_ref": "1eaa046834b81852261262b41b0919f5c1efdd2e",
                   "model_url": "https://ml-site.cdn-apple.com/models/sharp/sharp_2572gikvuh.pt",
                   "studio_path": "/studio",
                   "setup_path": "/setup",
@@ -134,7 +148,7 @@ jobs:
           with zipfile.ZipFile(runtime_archive, "w", compression=zipfile.ZIP_DEFLATED) as handle:
               for path in runtime_root.rglob("*"):
                   if path.is_file():
-                      handle.write(path, arcname=path.relative_to(dist_dir))
+                      handle.write(path, arcname=path.relative_to(runtime_root))
           print(f"created {runtime_archive}")
           PY
 

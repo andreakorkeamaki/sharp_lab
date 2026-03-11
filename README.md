@@ -56,9 +56,9 @@ Unzip it and launch:
 - Windows: double-click `Sharp Lab.exe`
 - macOS: open `Sharp Lab`
 
-The full packaged app starts the local studio UI and opens it in your default browser automatically. The Lite build opens a setup-first page instead, so you can download the portable runtime into the app folder on demand. Each release zip also includes `sharp_lab.example.json` so you can override paths without editing source code.
+The full packaged app starts the local studio UI and opens it in your default browser automatically. The Lite build opens a setup-first page instead. On Windows, the Lite setup now bootstraps a local Python runtime and installs SHARP into the app folder on demand, instead of relying on a bundled virtual environment. Each release zip also includes `sharp_lab.example.json` so you can override paths without editing source code.
 
-The release workflow now builds a bundled `ml-sharp` runtime from the pinned Apple source revision. The full app zip includes it directly, the Lite zip leaves it out to keep the initial download smaller, and the standalone runtime zip exists so the Lite app can fetch the same runtime later. The model checkpoint itself is still optional, because the app can download it during onboarding.
+The release workflow now builds a bundled `ml-sharp` runtime from the pinned Apple source revision. The full app zip includes it directly, while the Lite zip keeps the initial download smaller. On Windows, the Lite release bootstraps Python and SHARP locally on first setup; on other platforms, the Lite flow can still fetch a portable runtime archive. The model checkpoint itself is still optional, because the app can download it during onboarding.
 
 If you want to prepare the runtime bundle manually instead, use a top-level `runtime/` folder before building the release:
 
@@ -72,9 +72,9 @@ runtime/
 
 When that folder exists, the release workflow bundles it into the downloadable zip and the app auto-detects it on launch. Otherwise the workflow creates the runtime bundle itself from `apple/ml-sharp`.
 
-If the SHARP executable is present but the checkpoint file is not bundled, the app now offers a first-run "Download Apple Model" action in the UI. In the Lite build, the setup page also offers an "Install Runtime" action before you enter the studio. You can also let the SHARP CLI download the checkpoint automatically on the first prediction run and cache it under `~/.cache/torch/hub/checkpoints/`.
+If the SHARP executable is present but the checkpoint file is not bundled, the app now offers a first-run "Download Apple Model" action in the UI. In the Lite build, the setup page also offers an "Install Runtime" action before you enter the studio. On Windows, that action performs a full local bootstrap of Python and SHARP inside the app folder, then validates the install before unlocking the studio. You can also let the SHARP CLI download the checkpoint automatically on the first prediction run and cache it under `~/.cache/torch/hub/checkpoints/`.
 
-The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.3` builds:
+The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.4` builds:
 
 - a source distribution
 - a wheel
