@@ -25,7 +25,7 @@ class DownloadTests(unittest.TestCase):
                 reporter.download(5, 10)
                 time.sleep(0.02)
                 target_path.write_bytes(b"payload")
-                reporter.status("Finishing install.", 90)
+                reporter.status("Finishing install.", 90, "Installing torch (821.6 MB)")
                 reporter.download(10, 10)
                 return target_path
 
@@ -40,6 +40,7 @@ class DownloadTests(unittest.TestCase):
             self.assertEqual(snapshot.status, "completed")
             self.assertEqual(snapshot.percent, 100.0)
             self.assertEqual(snapshot.result_path, str(target_path))
+            self.assertIsNone(snapshot.detail)
 
     def test_download_to_path_uses_windows_fallback_for_ssl_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

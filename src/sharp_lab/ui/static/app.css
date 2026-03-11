@@ -45,13 +45,12 @@ body {
   padding: 24px;
 }
 
-.app-shell.is-editor-focus .masthead,
-.app-shell.is-editor-focus .view-nav {
+.app-shell.is-editor-focus .masthead {
   display: none;
 }
 
 .app-shell.is-editor-focus .views {
-  min-height: calc(100vh - 48px);
+  min-height: calc(100vh - 118px);
 }
 
 .masthead,
@@ -115,6 +114,11 @@ h1 {
   border: 1px solid rgba(19, 32, 43, 0.09);
 }
 
+.setup-banner.is-quiet {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.38);
+}
+
 .setup-banner h2 {
   margin-top: 6px;
   font-size: clamp(1.05rem, 1.6vw, 1.4rem);
@@ -175,6 +179,12 @@ h1 {
   background: rgba(247, 240, 230, 0.72);
 }
 
+.app-shell.is-editor-focus .view-nav {
+  position: sticky;
+  top: 16px;
+  z-index: 20;
+}
+
 .nav-chip {
   width: auto;
   min-width: 120px;
@@ -187,6 +197,10 @@ h1 {
 .nav-chip.active {
   background: var(--panel);
   color: white;
+}
+
+.nav-chip-secondary {
+  background: rgba(19, 32, 43, 0.06);
 }
 
 .views {

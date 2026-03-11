@@ -1,4 +1,6 @@
 const heroHint = document.getElementById("hero-hint");
+const setupShell = document.querySelector(".setup-shell");
+const wizardPanel = document.querySelector(".wizard-panel");
 const workspacePath = document.getElementById("workspace-path");
 const activityTitle = document.getElementById("activity-title");
 const activityBadge = document.getElementById("activity-badge");
@@ -80,7 +82,9 @@ function renderTask(task, progressBlock, progressBar, progressText, idleText) {
       progressBar.style.width = `${task.percent}%`;
       progressText.textContent = task.total_bytes != null
         ? `${task.percent}% · ${formatBytes(task.bytes_downloaded)} / ${formatBytes(task.total_bytes)}`
-        : `${task.percent}% · ${task.message}`;
+        : task.detail
+          ? `${task.percent}% · ${task.message} ${task.detail}`
+          : `${task.percent}% · ${task.message}`;
       return;
     }
 
@@ -106,8 +110,11 @@ function renderTask(task, progressBlock, progressBar, progressText, idleText) {
 function applyStatus(payload) {
   currentConfig = payload;
   const { sharp, release } = payload;
+  const isComplete = sharp.runtime_ready && sharp.checkpoint_exists;
 
   workspacePath.textContent = payload.workspace;
+  setupShell?.classList.toggle("is-complete", isComplete);
+  wizardPanel?.classList.toggle("is-complete", isComplete);
   heroHint.textContent = release.runtime_install_mode === "windows-local"
     ? "This build installs Python and SHARP locally inside the app folder, then unlocks the studio."
     : "This build installs only the runtime and model pieces needed on this machine.";
@@ -171,7 +178,7 @@ function applyStatus(payload) {
   setActivity(
     "Setup complete",
     "Everything needed for local runs is installed on this machine.",
-    "Open the studio and start a new SHARP run.",
+    "Open the studio and start a new SHARP run. You can always come back here later if you want to manage setup again.",
     "Ready",
   );
 }
@@ -270,16 +277,18 @@ function startPolling(kind) {
         setActivity(
           "Installing runtime",
           task.message,
-          currentConfig?.release?.runtime_install_mode === "windows-local"
-            ? "The app is preparing local Python, installing SHARP, and validating the runtime."
-            : "The app is downloading the runtime into this folder.",
+          task.detail || (
+            currentConfig?.release?.runtime_install_mode === "windows-local"
+              ? "The app is preparing local Python, installing SHARP, and validating the runtime."
+              : "The app is downloading the runtime into this folder."
+          ),
           "Step 1",
         );
       } else {
         setActivity(
           "Downloading model",
           task.message,
-          "The Apple SHARP model is being saved into the local runtime folder.",
+          task.detail || "The Apple SHARP model is being saved into the local runtime folder.",
           "Step 2",
         );
       }

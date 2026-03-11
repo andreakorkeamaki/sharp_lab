@@ -103,6 +103,18 @@ h1 {
   padding: 24px;
 }
 
+.setup-shell.is-complete .wizard-hero {
+  opacity: 0.88;
+}
+
+.wizard-panel.is-complete {
+  background: rgba(255, 251, 245, 0.84);
+}
+
+.wizard-panel.is-complete .step-card {
+  background: rgba(255, 253, 249, 0.72);
+}
+
 .panel-head {
   display: flex;
   align-items: start;

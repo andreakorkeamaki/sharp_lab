@@ -20,11 +20,14 @@ const progressBar = document.getElementById("progress-bar");
 const workspacePath = document.getElementById("workspace-path");
 const sharpStatus = document.getElementById("sharp-status");
 const checkpointStatus = document.getElementById("checkpoint-status");
+const setupBanner = document.getElementById("setup-banner");
 const setupTitle = document.getElementById("setup-title");
 const setupHint = document.getElementById("setup-hint");
 const setupDownloadProgressBar = document.getElementById("setup-download-progress-bar");
 const setupDownloadProgressText = document.getElementById("setup-download-progress-text");
 const downloadModelButton = document.getElementById("download-model");
+const openSetupButton = document.getElementById("open-setup");
+const navOpenSetupButton = document.getElementById("nav-open-setup");
 const runCount = document.getElementById("run-count");
 const latestRunTitle = document.getElementById("latest-run-title");
 const latestRunSummary = document.getElementById("latest-run-summary");
@@ -101,6 +104,7 @@ let activeRunId = null;
 let activeArtifactName = null;
 let currentRuns = [];
 let currentSharpConfig = null;
+let currentAppConfig = null;
 let modelDownloadPoller = null;
 let processingStartedAt = null;
 let processingTimerId = null;
@@ -494,6 +498,7 @@ function describeSetup(sharp) {
       title: "This download still needs the SHARP runtime",
       hint: "Bundle run-sharp with the app in a runtime folder, or install the SHARP runtime on this machine before running predictions.",
       canDownload: false,
+      quiet: false,
     };
   }
 
@@ -504,6 +509,7 @@ function describeSetup(sharp) {
       title: "The runtime is present, but the Apple model is not downloaded yet",
       hint: `Download the Apple SHARP model into ${sharp.preferred_checkpoint} before running predictions.`,
       canDownload: Boolean(sharp.can_download_checkpoint),
+      quiet: true,
     };
   }
 
@@ -511,9 +517,10 @@ function describeSetup(sharp) {
     return {
       runtime: "ready",
       checkpoint: "download available",
-      title: "The SHARP runtime is ready",
-      hint: `Download the Apple model now and save it under ${sharp.preferred_checkpoint}, or let Apple SHARP fetch it automatically on the first prediction run and cache it under ${sharp.model_cache_dir}.`,
+      title: "Local setup is ready",
+      hint: `The studio can run now. You can still download the Apple model into ${sharp.preferred_checkpoint} if you want to avoid a first-run fetch later.`,
       canDownload: Boolean(sharp.can_download_checkpoint),
+      quiet: true,
     };
   }
 
@@ -524,15 +531,17 @@ function describeSetup(sharp) {
       title: "The runtime is present, but the checkpoint path is broken",
       hint: "Update the checkpoint path in sharp_lab.json or bundle the model into runtime/models before shipping this app.",
       canDownload: Boolean(sharp.can_download_checkpoint),
+      quiet: false,
     };
   }
 
   return {
     runtime: "ready",
     checkpoint: "bundled",
-    title: "The SHARP runtime and model are bundled locally",
-    hint: "This build already has the model available, so predictions can run without downloading the checkpoint first.",
+    title: "Setup complete",
+    hint: "Everything needed for local runs is already installed on this machine.",
     canDownload: false,
+    quiet: true,
   };
 }
 
@@ -677,7 +686,11 @@ function renderSetupDownloadTask(task) {
   if (task.status === "running") {
     if (task.percent != null) {
       setupDownloadProgressBar.style.transform = `scaleX(${task.percent / 100})`;
-      setupDownloadProgressText.textContent = `${task.percent}% · ${formatDownloadBytes(task.bytes_downloaded)} / ${formatDownloadBytes(task.total_bytes)}`;
+      setupDownloadProgressText.textContent = task.total_bytes != null
+        ? `${task.percent}% · ${formatDownloadBytes(task.bytes_downloaded)} / ${formatDownloadBytes(task.total_bytes)}`
+        : task.detail
+          ? `${task.percent}% · ${task.message} ${task.detail}`
+          : `${task.percent}% · ${task.message}`;
       return;
     }
 
@@ -736,7 +749,7 @@ function startModelDownloadPolling() {
         }
       } else {
         setupTitle.textContent = "Downloading the Apple SHARP model";
-        setupHint.textContent = task.message;
+        setupHint.textContent = task.detail || task.message;
       }
     } catch (error) {
       console.error(error);
@@ -754,6 +767,7 @@ async function fetchConfig() {
     throw new Error("Could not load config.");
   }
   const payload = await response.json();
+  currentAppConfig = payload;
   currentSharpConfig = payload.sharp;
   const setup = describeSetup(payload.sharp);
   workspacePath.textContent = payload.workspace;
@@ -761,6 +775,7 @@ async function fetchConfig() {
   checkpointStatus.textContent = setup.checkpoint;
   setupTitle.textContent = setup.title;
   setupHint.textContent = setup.hint;
+  setupBanner.classList.toggle("is-quiet", setup.quiet);
   downloadModelButton.hidden = !setup.canDownload || payload.sharp.checkpoint_exists;
   downloadModelButton.disabled = !setup.canDownload || payload.sharp.checkpoint_exists;
   downloadModelButton.textContent = "Download Apple Model";
@@ -790,6 +805,11 @@ async function downloadModel() {
     setupHint.textContent = error.message;
     setProcessingState("Error", error.message, "Check your internet connection and try the model download again.");
   }
+}
+
+function openSetup() {
+  const path = currentAppConfig?.release?.setup_path || "/setup";
+  window.location.href = path;
 }
 
 async function fetchRuns() {
@@ -1014,6 +1034,8 @@ artifactSelect.addEventListener("change", async () => {
 decimationRatio.addEventListener("input", updateDecimationValue);
 decimateRunButton.addEventListener("click", decimateCurrentRun);
 downloadModelButton.addEventListener("click", downloadModel);
+openSetupButton.addEventListener("click", openSetup);
+navOpenSetupButton.addEventListener("click", openSetup);
 
 for (const button of viewButtons) {
   button.addEventListener("click", () => setView(button.dataset.viewTarget));

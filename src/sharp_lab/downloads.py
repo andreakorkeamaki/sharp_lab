@@ -164,6 +164,7 @@ class DownloadTaskSnapshot:
     kind: str
     status: str
     message: str
+    detail: str | None = None
     bytes_downloaded: int = 0
     total_bytes: int | None = None
     percent: float | None = None
@@ -184,8 +185,8 @@ class TaskReporter:
     def download(self, downloaded: int, total: int | None) -> None:
         self._manager._update_progress(self._kind, downloaded, total)
 
-    def status(self, message: str, percent: float | None = None) -> None:
-        self._manager._update_status(self._kind, message, percent)
+    def status(self, message: str, percent: float | None = None, detail: str | None = None) -> None:
+        self._manager._update_status(self._kind, message, percent, detail)
 
 
 class DownloadTaskManager:
@@ -247,12 +248,21 @@ class DownloadTaskManager:
             else:
                 task.message = f"Downloaded {downloaded:,} bytes."
 
-    def _update_status(self, kind: str, message: str, percent: float | None = None) -> None:
+    def _update_status(
+        self,
+        kind: str,
+        message: str,
+        percent: float | None = None,
+        detail: str | None = None,
+    ) -> None:
         with self._lock:
             task = self._tasks.get(kind)
             if task is None:
                 return
             task.message = message
+            task.detail = detail
+            task.bytes_downloaded = 0
+            task.total_bytes = None
             if percent is not None:
                 task.percent = percent
 
@@ -271,6 +281,8 @@ class DownloadTaskManager:
                 return
             task.status = status
             task.message = message
+            if status != "running":
+                task.detail = None
             task.error = error
             task.result_path = result_path
             task.finished_at = datetime.now(timezone.utc).isoformat()

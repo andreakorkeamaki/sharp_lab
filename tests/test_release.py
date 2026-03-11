@@ -13,7 +13,7 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from sharp_lab.release import RELEASE_MANIFEST_FILE, ReleaseManifest, RuntimeInstallService
+from sharp_lab.release import RELEASE_MANIFEST_FILE, ReleaseManifest, RuntimeInstallService, _parse_install_output_line
 
 
 class FakeDownloadResponse(io.BytesIO):
@@ -168,6 +168,14 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue((runtime_path / "sharp_bootstrap.py").exists())
             build_info = json.loads((runtime_path / "build-info.json").read_text(encoding="utf-8"))
             self.assertEqual(build_info["sharp_repo_ref"], "abc123")
+
+    def test_parse_install_output_line_keeps_download_sizes(self) -> None:
+        detail = _parse_install_output_line("Downloading torch-2.8.0-cp311.whl (821.6 MB)")
+        self.assertEqual(detail, "Downloading torch-2.8.0-cp311.whl (821.6 MB)")
+
+    def test_parse_install_output_line_ignores_noise(self) -> None:
+        detail = _parse_install_output_line("   ")
+        self.assertIsNone(detail)
 
 
 if __name__ == "__main__":

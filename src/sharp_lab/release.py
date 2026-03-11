@@ -22,6 +22,9 @@ DEFAULT_SHARP_REPO_REF = "1eaa046834b81852261262b41b0919f5c1efdd2e"
 DEFAULT_SHARP_SOURCE_URL = f"https://github.com/apple/ml-sharp/archive/{DEFAULT_SHARP_REPO_REF}.zip"
 
 
+StatusCallback = Callable[[str, float | None, str | None], None]
+
+
 @dataclass(frozen=True)
 class ReleaseManifest:
     build_flavor: str = "full"
@@ -91,7 +94,7 @@ class RuntimeInstallService:
         self,
         manifest: ReleaseManifest,
         progress_callback: ProgressCallback | None = None,
-        status_callback: Callable[[str, float | None], None] | None = None,
+        status_callback: StatusCallback | None = None,
     ) -> Path:
         self.root_dir.mkdir(parents=True, exist_ok=True)
         install_mode = manifest.runtime_install_mode
@@ -142,7 +145,7 @@ class RuntimeInstallService:
         manifest: ReleaseManifest,
         *,
         progress_callback: ProgressCallback | None = None,
-        status_callback: Callable[[str, float | None], None] | None = None,
+        status_callback: StatusCallback | None = None,
     ) -> Path:
         runtime_dir = self.root_dir / "runtime"
         staging_dir = self.root_dir / "runtime.installing"
@@ -176,6 +179,9 @@ class RuntimeInstallService:
                         str(python_root),
                     ],
                     cwd=temp_dir,
+                    status_callback=status_callback,
+                    progress_percent=20,
+                    status_message="Installing local Python runtime.",
                 )
 
                 python_exe = python_root / manifest.python_package / "tools" / "python.exe"
@@ -183,8 +189,23 @@ class RuntimeInstallService:
                     raise RuntimeError(f"Python bootstrap did not produce {python_exe}.")
 
                 self._status(status_callback, "Ensuring pip is available.", 35)
-                self._run([str(python_exe), "-m", "ensurepip", "--upgrade"], cwd=temp_dir, allow_failure=True)
-                self._run([str(python_exe), "-m", "pip", "install", "--upgrade", "pip"], cwd=temp_dir)
+                self._run(
+                    [str(python_exe), "-m", "ensurepip", "--upgrade"],
+                    cwd=temp_dir,
+                    allow_failure=True,
+                    status_callback=status_callback,
+                    progress_percent=35,
+                    status_message="Ensuring pip is available.",
+                )
+                self._run(
+                    [str(python_exe), "-m", "pip", "install", "--upgrade", "pip"],
+                    cwd=temp_dir,
+                    status_callback=status_callback,
+                    progress_percent=35,
+                    status_message="Ensuring pip is available.",
+                    stream_output=True,
+                    output_parser=_parse_install_output_line,
+                )
 
                 self._status(status_callback, "Downloading pinned Apple SHARP source.", 45)
                 source_archive = temp_dir / "ml-sharp.zip"
@@ -202,10 +223,23 @@ class RuntimeInstallService:
                     self._run(
                         [str(python_exe), "-m", "pip", "install", "-r", str(requirements_path)],
                         cwd=sharp_source_root,
+                        status_callback=status_callback,
+                        progress_percent=65,
+                        status_message="Installing SHARP dependencies.",
+                        stream_output=True,
+                        output_parser=_parse_install_output_line,
                     )
 
                 self._status(status_callback, "Installing SHARP into the local runtime.", 82)
-                self._run([str(python_exe), "-m", "pip", "install", str(sharp_source_root)], cwd=sharp_source_root)
+                self._run(
+                    [str(python_exe), "-m", "pip", "install", str(sharp_source_root)],
+                    cwd=sharp_source_root,
+                    status_callback=status_callback,
+                    progress_percent=82,
+                    status_message="Installing SHARP into the local runtime.",
+                    stream_output=True,
+                    output_parser=_parse_install_output_line,
+                )
 
                 self._status(status_callback, "Writing local launchers.", 92)
                 shutil.copytree(python_root / manifest.python_package, staging_dir / "python", dirs_exist_ok=True)
@@ -213,7 +247,13 @@ class RuntimeInstallService:
                 _copy_runtime_metadata(sharp_source_root, staging_dir, manifest)
 
                 self._status(status_callback, "Validating runtime installation.", 97)
-                self._run(["cmd.exe", "/c", str(staging_dir / "run-sharp.cmd"), "--help"], cwd=staging_dir)
+                self._run(
+                    ["cmd.exe", "/c", str(staging_dir / "run-sharp.cmd"), "--help"],
+                    cwd=staging_dir,
+                    status_callback=status_callback,
+                    progress_percent=97,
+                    status_message="Validating runtime installation.",
+                )
 
                 if runtime_dir.exists():
                     shutil.rmtree(runtime_dir)
@@ -231,21 +271,114 @@ class RuntimeInstallService:
         *,
         cwd: Path,
         allow_failure: bool = False,
+        status_callback: StatusCallback | None = None,
+        progress_percent: float | None = None,
+        status_message: str | None = None,
+        stream_output: bool = False,
+        output_parser: Callable[[str], str | None] | None = None,
     ) -> None:
+        if stream_output and status_callback is not None:
+            self._run_streaming(
+                command,
+                cwd=cwd,
+                allow_failure=allow_failure,
+                status_callback=status_callback,
+                progress_percent=progress_percent,
+                status_message=status_message,
+                output_parser=output_parser,
+            )
+            return
+
         process = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
         if process.returncode == 0 or allow_failure:
             return
         output = process.stderr.strip() or process.stdout.strip() or f"Command exited with code {process.returncode}."
         raise RuntimeError(output)
 
+    def _run_streaming(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        allow_failure: bool,
+        status_callback: StatusCallback,
+        progress_percent: float | None,
+        status_message: str | None,
+        output_parser: Callable[[str], str | None] | None,
+    ) -> None:
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        output_lines: list[str] = []
+        last_detail: str | None = None
+
+        if process.stdout is not None:
+            for raw_line in process.stdout:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                output_lines.append(line)
+                detail = output_parser(line) if output_parser is not None else _normalize_install_output_line(line)
+                if detail:
+                    last_detail = detail
+                    self._status(status_callback, status_message or detail, progress_percent, detail if status_message else None)
+
+        return_code = process.wait()
+        if return_code == 0 or allow_failure:
+            return
+
+        output = last_detail or "\n".join(output_lines[-6:]) or f"Command exited with code {return_code}."
+        raise RuntimeError(output)
+
     def _status(
         self,
-        status_callback: Callable[[str, float | None], None] | None,
+        status_callback: StatusCallback | None,
         message: str,
         percent: float | None,
+        detail: str | None = None,
     ) -> None:
         if status_callback is not None:
-            status_callback(message, percent)
+            status_callback(message, percent, detail)
+
+
+def _normalize_install_output_line(line: str) -> str | None:
+    cleaned = " ".join(line.strip().split())
+    if not cleaned:
+        return None
+    return cleaned[:160]
+
+
+def _parse_install_output_line(line: str) -> str | None:
+    cleaned = _normalize_install_output_line(line)
+    if not cleaned:
+        return None
+
+    prefixes = (
+        "Collecting ",
+        "Downloading ",
+        "Using cached ",
+        "Installing collected packages",
+        "Building wheel for ",
+        "Getting requirements to build wheel",
+        "Preparing metadata ",
+        "Successfully installed ",
+    )
+    if cleaned.startswith(prefixes):
+        return cleaned[:160]
+
+    if " MB)" in cleaned or " GB)" in cleaned or " kB)" in cleaned or " KB)" in cleaned:
+        return cleaned[:160]
+
+    if cleaned.startswith("Requirement already satisfied:"):
+        return cleaned[:160]
+
+    return None
 
 
 def _safe_extract_zip(archive: zipfile.ZipFile, destination: Path) -> None:
