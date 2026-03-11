@@ -84,7 +84,8 @@ class SharpIntegrationService:
         }
 
     def installation_status(self) -> dict[str, object]:
-        executable_exists = bool(self.executable and self.executable.exists())
+        executable_path = self._resolve_executable_path()
+        executable_exists = bool(executable_path and executable_path.exists())
         checkpoint_exists = bool(self.checkpoint and self.checkpoint.exists())
         preferred_checkpoint = self.preferred_checkpoint_path()
         can_download_checkpoint = executable_exists and preferred_checkpoint is not None
@@ -118,7 +119,7 @@ class SharpIntegrationService:
             checkpoint_hint = "The configured checkpoint path does not exist."
 
         return {
-            "executable": str(self.executable) if self.executable else None,
+            "executable": str(executable_path) if executable_path else None,
             "checkpoint": str(self.checkpoint) if self.checkpoint else None,
             "preferred_checkpoint": str(preferred_checkpoint) if preferred_checkpoint else None,
             "executable_exists": executable_exists,
@@ -136,21 +137,24 @@ class SharpIntegrationService:
     def preferred_checkpoint_path(self) -> Path | None:
         if self.checkpoint is not None:
             return self.checkpoint.resolve()
-        if self.executable is None:
+        executable_path = self._resolve_executable_path()
+        if executable_path is None:
             return None
-        return (self.executable.resolve().parent / "models" / DEFAULT_MODEL_FILENAME).resolve()
+        return (executable_path.resolve().parent / "models" / DEFAULT_MODEL_FILENAME).resolve()
 
     def preferred_model_cache_dir(self) -> Path:
-        if self.executable is None:
+        executable_path = self._resolve_executable_path()
+        if executable_path is None:
             return (Path.home() / ".cache" / "torch" / "hub" / "checkpoints").resolve()
-        return (self.executable.resolve().parent / ".cache" / "torch" / "hub" / "checkpoints").resolve()
+        return (executable_path.resolve().parent / ".cache" / "torch" / "hub" / "checkpoints").resolve()
 
     def download_default_checkpoint(
         self,
         url: str = DEFAULT_MODEL_URL,
         progress_callback: ProgressCallback | None = None,
     ) -> Path:
-        if self.executable is None or not self.executable.exists():
+        executable_path = self._resolve_executable_path()
+        if executable_path is None or not executable_path.exists():
             raise RuntimeError("The SHARP runtime is not installed on this machine yet.")
 
         target_path = self.preferred_checkpoint_path()
@@ -196,12 +200,13 @@ class SharpIntegrationService:
         raise RuntimeError(f"Could not save the Apple SHARP model to {target_path}.")
 
     def predict(self, input_path: Path, device: str | None = None) -> SharpRunRecord:
-        if self.runs_dir is None or self.executable is None:
+        executable_path = self._resolve_executable_path()
+        if self.runs_dir is None or executable_path is None:
             raise RuntimeError("SHARP service is not configured for local runs.")
         if not input_path.exists():
             raise FileNotFoundError(f"Input path does not exist: {input_path}")
-        if not self.executable.exists():
-            raise FileNotFoundError(f"SHARP executable not found: {self.executable}")
+        if not executable_path.exists():
+            raise FileNotFoundError(f"SHARP executable not found: {executable_path}")
         if self.checkpoint is not None and not self.checkpoint.exists():
             raise FileNotFoundError(f"SHARP checkpoint not found: {self.checkpoint}")
 
@@ -214,7 +219,7 @@ class SharpIntegrationService:
 
         chosen_device = device or self.default_device
         command = [
-            str(self.executable),
+            str(executable_path),
             "predict",
             "-i",
             str(input_path),
@@ -259,6 +264,26 @@ class SharpIntegrationService:
         if status != "completed":
             raise RuntimeError(error or "SHARP prediction failed.")
         return record
+
+    def _resolve_executable_path(self) -> Path | None:
+        if self.executable is None:
+            return None
+        if self.executable.exists():
+            self.executable = self.executable.resolve()
+            return self.executable
+
+        parent = self.executable.parent
+        if os.name == "nt":
+            candidate_names = ("run-sharp.exe", "run-sharp.bat", "run-sharp.cmd")
+        else:
+            candidate_names = ("run-sharp",)
+
+        for candidate_name in candidate_names:
+            candidate = parent / candidate_name
+            if candidate.exists():
+                self.executable = candidate.resolve()
+                return self.executable
+        return self.executable
 
     def list_runs(self) -> list[SharpRunRecord]:
         if self.runs_dir is None or not self.runs_dir.exists():

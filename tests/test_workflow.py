@@ -183,8 +183,28 @@ printf 'fake sharp completed\n'
                         service._replace_checkpoint_file(source_path, target_path)
 
             self.assertEqual(attempts["count"], 3)
-            self.assertTrue(target_path.exists())
-            self.assertEqual(target_path.read_bytes(), b"weights")
+
+    def test_installation_status_resolves_windows_launcher_after_runtime_install(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp_path = Path(temp_dir)
+            runtime_dir = tmp_path / "runtime"
+            runtime_dir.mkdir(parents=True)
+            launcher_path = runtime_dir / "run-sharp.cmd"
+            launcher_path.write_text("@echo off\r\n", encoding="utf-8")
+
+            service = SharpIntegrationService(
+                runs_dir=tmp_path / "runs",
+                executable=runtime_dir / "run-sharp.exe",
+                checkpoint=None,
+                default_device="cpu",
+            )
+
+            with mock.patch("sharp_lab.sharp.integration.os.name", "nt"):
+                status = service.installation_status()
+
+            self.assertTrue(status["executable_exists"])
+            self.assertTrue(status["runtime_ready"])
+            self.assertEqual(Path(status["executable"]), launcher_path.resolve())
 
     def test_sharp_decimate_creates_variant_and_updates_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

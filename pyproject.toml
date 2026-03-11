@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sharp_lab"
-version = "0.1.5"
+version = "0.1.6"
 description = "Local tools for experimenting with iPhone photos and preparing assets for Apple SHARP workflows."
 readme = "README.md"
 requires-python = ">=3.9"

@@ -74,7 +74,7 @@ When that folder exists, the release workflow bundles it into the downloadable z
 
 If the SHARP executable is present but the checkpoint file is not bundled, the app now offers a first-run "Download Apple Model" action in the UI. In the Lite build, the setup page also offers an "Install Runtime" action before you enter the studio. On Windows, that action performs a full local bootstrap of Python and SHARP inside the app folder, then validates the install before unlocking the studio. You can also let the SHARP CLI download the checkpoint automatically on the first prediction run and cache it under `~/.cache/torch/hub/checkpoints/`.
 
-The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.5` builds:
+The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.6` builds:
 
 - a source distribution
 - a wheel

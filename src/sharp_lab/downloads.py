@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+import os
 from pathlib import Path
+import shutil
+import ssl
+import subprocess
 import threading
 from typing import Callable
+from urllib.error import URLError
 from urllib.request import urlopen
 
 CHUNK_SIZE = 1024 * 1024
@@ -14,6 +19,18 @@ ProgressCallback = Callable[[int, int | None], None]
 
 def download_to_path(url: str, destination: Path, progress_callback: ProgressCallback | None = None) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _download_with_urllib(url, destination, progress_callback=progress_callback)
+        return
+    except Exception as exc:
+        destination.unlink(missing_ok=True)
+        if not _is_windows() or not _is_ssl_verification_error(exc):
+            raise
+
+    _download_with_windows_fallback(url, destination, progress_callback=progress_callback)
+
+
+def _download_with_urllib(url: str, destination: Path, progress_callback: ProgressCallback | None = None) -> None:
     with destination.open("wb") as handle:
         with urlopen(url) as response:
             total_header = response.headers.get("Content-Length")
@@ -31,6 +48,115 @@ def download_to_path(url: str, destination: Path, progress_callback: ProgressCal
 
             if progress_callback is not None:
                 progress_callback(downloaded, total_bytes)
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _is_ssl_verification_error(exc: Exception) -> bool:
+    visited: set[int] = set()
+    current: BaseException | None = exc
+
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return True
+        if isinstance(current, URLError) and isinstance(current.reason, ssl.SSLCertVerificationError):
+            return True
+
+        message = str(current).lower()
+        if "certificate verify failed" in message or "self-signed certificate in certificate chain" in message:
+            return True
+
+        if isinstance(current, URLError) and isinstance(current.reason, BaseException):
+            current = current.reason
+            continue
+        current = current.__cause__ or current.__context__
+
+    return False
+
+
+def _download_with_windows_fallback(
+    url: str,
+    destination: Path,
+    progress_callback: ProgressCallback | None = None,
+) -> None:
+    errors: list[str] = []
+
+    if progress_callback is not None:
+        progress_callback(0, None)
+
+    try:
+        _download_with_curl(url, destination, progress_callback=progress_callback)
+        return
+    except Exception as exc:
+        destination.unlink(missing_ok=True)
+        errors.append(str(exc))
+
+    try:
+        _download_with_powershell(url, destination, progress_callback=progress_callback)
+        return
+    except Exception as exc:
+        destination.unlink(missing_ok=True)
+        errors.append(str(exc))
+
+    error_summary = "; ".join(error for error in errors if error) or "No Windows downloader succeeded."
+    raise RuntimeError(
+        "Python could not verify the model download certificate, and the Windows download fallback failed. "
+        f"{error_summary}"
+    )
+
+
+def _download_with_curl(url: str, destination: Path, progress_callback: ProgressCallback | None = None) -> None:
+    curl = shutil.which("curl.exe") or shutil.which("curl")
+    if curl is None:
+        raise RuntimeError("curl.exe is not available on this Windows machine.")
+
+    result = subprocess.run(
+        [curl, "--fail", "--location", "--silent", "--show-error", "--output", str(destination), url],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "curl.exe failed to download the file.")
+
+    if progress_callback is not None:
+        downloaded = destination.stat().st_size if destination.exists() else 0
+        progress_callback(downloaded, downloaded if downloaded else None)
+
+
+def _download_with_powershell(url: str, destination: Path, progress_callback: ProgressCallback | None = None) -> None:
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if powershell is None:
+        raise RuntimeError("PowerShell is not available on this Windows machine.")
+
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            (
+                "$ProgressPreference = 'SilentlyContinue'; "
+                f"Invoke-WebRequest -Uri '{_powershell_escape(url)}' -OutFile '{_powershell_escape(str(destination))}'"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "PowerShell failed to download the file.")
+
+    if progress_callback is not None:
+        downloaded = destination.stat().st_size if destination.exists() else 0
+        progress_callback(downloaded, downloaded if downloaded else None)
+
+
+def _powershell_escape(value: str) -> str:
+    return value.replace("'", "''")
 
 
 @dataclass

@@ -8,62 +8,75 @@
   </head>
   <body>
     <main class="setup-shell">
-      <section class="hero">
+      <section class="wizard-hero">
         <p class="eyebrow">sharp_lab lite</p>
-        <h1>Install only what this machine needs.</h1>
-        <p class="lede">
-          This lighter build starts with setup first. Install the portable SHARP runtime, add the Apple model when you want it,
-          then launch the studio.
+        <h1>Set up this machine in 3 steps.</h1>
+        <p id="hero-hint" class="lede">
+          This build installs only what is needed on this PC. Start with the runtime, then add the Apple model if you want faster first runs.
         </p>
-        <div class="hero-actions">
-          <button id="install-runtime" type="button">Install Runtime</button>
-          <button id="download-model" type="button" class="secondary">Download Model</button>
-          <button id="open-studio" type="button" class="secondary">Open Studio</button>
-        </div>
+        <p id="workspace-path" class="workspace-path">-</p>
       </section>
 
-      <section class="status-grid">
-        <article class="status-card">
-          <p class="label">Build</p>
-          <h2 id="build-flavor">-</h2>
-          <p id="build-hint" class="hint">Checking release metadata.</p>
-        </article>
-
-        <article class="status-card accent">
-          <p class="label">Runtime</p>
-          <h2 id="runtime-status">-</h2>
-          <p id="runtime-hint" class="hint">Checking local runtime.</p>
-          <div class="progress-block">
-            <div class="progress-track" aria-hidden="true">
-              <div id="runtime-progress-bar" class="progress-bar"></div>
-            </div>
-            <p id="runtime-progress-text" class="hint">No runtime download in progress.</p>
-          </div>
-        </article>
-
-        <article class="status-card">
-          <p class="label">Model</p>
-          <h2 id="model-status">-</h2>
-          <p id="model-hint" class="hint">Checking model availability.</p>
-          <div class="progress-block">
-            <div class="progress-track" aria-hidden="true">
-              <div id="model-progress-bar" class="progress-bar"></div>
-            </div>
-            <p id="model-progress-text" class="hint">No model download in progress.</p>
-          </div>
-        </article>
-      </section>
-
-      <section class="panel">
+      <section class="wizard-panel">
         <div class="panel-head">
           <div>
-            <p class="label">Setup</p>
-            <h2 id="activity-title">Ready</h2>
+            <p class="label">Setup Assistant</p>
+            <h2 id="activity-title">Checking this machine</h2>
           </div>
-          <p id="workspace-path" class="workspace-path">-</p>
+          <p id="activity-badge" class="activity-badge">Preparing</p>
         </div>
-        <p id="activity-message" class="activity-message">Choose a step to prepare this machine.</p>
-        <p id="activity-detail" class="hint">The runtime installs into the app folder so the Lite build stays small until you need it.</p>
+        <p id="activity-message" class="activity-message">Loading setup status.</p>
+        <p id="activity-detail" class="hint">The assistant will guide you through runtime install, optional model download, and studio launch.</p>
+
+        <div class="step-list">
+          <article id="runtime-step" class="step-card">
+            <div class="step-copy">
+              <p class="step-number">Step 1</p>
+              <h3 id="runtime-title">Install runtime</h3>
+              <p id="runtime-hint" class="hint">Preparing runtime status.</p>
+            </div>
+            <div class="step-action">
+              <p id="runtime-status" class="step-status">Checking</p>
+              <button id="install-runtime" type="button">Install Runtime</button>
+            </div>
+            <div id="runtime-progress-block" class="progress-block is-hidden">
+              <div class="progress-track" aria-hidden="true">
+                <div id="runtime-progress-bar" class="progress-bar"></div>
+              </div>
+              <p id="runtime-progress-text" class="hint">No runtime install in progress.</p>
+            </div>
+          </article>
+
+          <article id="model-step" class="step-card">
+            <div class="step-copy">
+              <p class="step-number">Step 2</p>
+              <h3 id="model-title">Download model</h3>
+              <p id="model-hint" class="hint">The model becomes available after runtime install.</p>
+            </div>
+            <div class="step-action">
+              <p id="model-status" class="step-status">Waiting</p>
+              <button id="download-model" type="button" class="secondary">Download Model</button>
+            </div>
+            <div id="model-progress-block" class="progress-block is-hidden">
+              <div class="progress-track" aria-hidden="true">
+                <div id="model-progress-bar" class="progress-bar"></div>
+              </div>
+              <p id="model-progress-text" class="hint">No model download in progress.</p>
+            </div>
+          </article>
+
+          <article id="studio-step" class="step-card">
+            <div class="step-copy">
+              <p class="step-number">Step 3</p>
+              <h3 id="studio-title">Open studio</h3>
+              <p id="studio-hint" class="hint">The studio unlocks as soon as the runtime is ready.</p>
+            </div>
+            <div class="step-action">
+              <p id="studio-status" class="step-status">Locked</p>
+              <button id="open-studio" type="button" class="secondary">Open Studio</button>
+            </div>
+          </article>
+        </div>
       </section>
     </main>
 

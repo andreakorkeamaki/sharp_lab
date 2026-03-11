@@ -1,29 +1,40 @@
-const buildFlavor = document.getElementById("build-flavor");
-const buildHint = document.getElementById("build-hint");
-const runtimeStatus = document.getElementById("runtime-status");
-const runtimeHint = document.getElementById("runtime-hint");
-const runtimeProgressBar = document.getElementById("runtime-progress-bar");
-const runtimeProgressText = document.getElementById("runtime-progress-text");
-const modelStatus = document.getElementById("model-status");
-const modelHint = document.getElementById("model-hint");
-const modelProgressBar = document.getElementById("model-progress-bar");
-const modelProgressText = document.getElementById("model-progress-text");
+const heroHint = document.getElementById("hero-hint");
 const workspacePath = document.getElementById("workspace-path");
 const activityTitle = document.getElementById("activity-title");
+const activityBadge = document.getElementById("activity-badge");
 const activityMessage = document.getElementById("activity-message");
 const activityDetail = document.getElementById("activity-detail");
+
+const runtimeStep = document.getElementById("runtime-step");
+const runtimeStatus = document.getElementById("runtime-status");
+const runtimeHint = document.getElementById("runtime-hint");
+const runtimeProgressBlock = document.getElementById("runtime-progress-block");
+const runtimeProgressBar = document.getElementById("runtime-progress-bar");
+const runtimeProgressText = document.getElementById("runtime-progress-text");
 const installRuntimeButton = document.getElementById("install-runtime");
+
+const modelStep = document.getElementById("model-step");
+const modelStatus = document.getElementById("model-status");
+const modelHint = document.getElementById("model-hint");
+const modelProgressBlock = document.getElementById("model-progress-block");
+const modelProgressBar = document.getElementById("model-progress-bar");
+const modelProgressText = document.getElementById("model-progress-text");
 const downloadModelButton = document.getElementById("download-model");
+
+const studioStep = document.getElementById("studio-step");
+const studioStatus = document.getElementById("studio-status");
+const studioHint = document.getElementById("studio-hint");
 const openStudioButton = document.getElementById("open-studio");
 
 let currentConfig = null;
 let runtimePoller = null;
 let modelPoller = null;
 
-function setActivity(title, message, detail) {
+function setActivity(title, message, detail, badge = "Preparing") {
   activityTitle.textContent = title;
   activityMessage.textContent = message;
   activityDetail.textContent = detail;
+  activityBadge.textContent = badge;
 }
 
 function formatBytes(value) {
@@ -46,14 +57,23 @@ function formatBytes(value) {
   return `${size.toFixed(size >= 100 ? 0 : 1)} ${unit}`;
 }
 
-function renderTask(task, progressBar, progressText, idleText) {
+function setStepState(element, state) {
+  element.classList.toggle("is-active", state === "active");
+  element.classList.toggle("is-done", state === "done");
+  element.classList.toggle("is-locked", state === "locked");
+}
+
+function renderTask(task, progressBlock, progressBar, progressText, idleText) {
   progressBar.classList.remove("is-indeterminate");
 
   if (!task || task.status === "idle") {
+    progressBlock.classList.add("is-hidden");
     progressBar.style.width = "0%";
     progressText.textContent = idleText;
     return;
   }
+
+  progressBlock.classList.remove("is-hidden");
 
   if (task.status === "running") {
     if (task.percent != null) {
@@ -68,7 +88,7 @@ function renderTask(task, progressBar, progressText, idleText) {
     progressBar.classList.add("is-indeterminate");
     progressText.textContent = formatBytes(task.bytes_downloaded)
       ? `${formatBytes(task.bytes_downloaded)} downloaded`
-      : "Starting download...";
+      : "Starting...";
     return;
   }
 
@@ -76,11 +96,11 @@ function renderTask(task, progressBar, progressText, idleText) {
   if (task.status === "completed") {
     progressText.textContent = task.total_bytes
       ? `${formatBytes(task.total_bytes)} downloaded`
-      : "Download completed.";
+      : "Completed.";
     return;
   }
 
-  progressText.textContent = task.error || task.message || "Download failed.";
+  progressText.textContent = task.error || task.message || "Failed.";
 }
 
 function applyStatus(payload) {
@@ -88,36 +108,52 @@ function applyStatus(payload) {
   const { sharp, release } = payload;
 
   workspacePath.textContent = payload.workspace;
-  buildFlavor.textContent = release.build_flavor === "lite" ? "Lite build" : "Full build";
-  buildHint.textContent = release.runtime_install_mode === "windows-local"
-    ? "This app bootstraps Python and SHARP locally inside the app folder."
-    : release.can_install_runtime
-      ? "This app knows where to fetch the portable runtime for this release."
-      : "This build has no runtime installer configured.";
+  heroHint.textContent = release.runtime_install_mode === "windows-local"
+    ? "This build installs Python and SHARP locally inside the app folder, then unlocks the studio."
+    : "This build installs only the runtime and model pieces needed on this machine.";
 
-  runtimeStatus.textContent = sharp.executable_exists ? "Installed" : "Missing";
-  runtimeHint.textContent = sharp.executable_exists
-    ? `Runtime ready at ${sharp.executable}.`
-    : "Install the portable runtime into this app folder before opening the studio.";
+  installRuntimeButton.textContent = sharp.runtime_ready ? "Runtime Installed" : "Install Runtime";
+  downloadModelButton.textContent = sharp.checkpoint_exists ? "Model Installed" : "Download Model";
 
-  modelStatus.textContent = sharp.checkpoint_exists ? "Installed" : "Optional";
-  modelHint.textContent = sharp.checkpoint_exists
-    ? `Model ready at ${sharp.checkpoint}.`
-    : sharp.preferred_checkpoint
-      ? `The Apple model will be saved to ${sharp.preferred_checkpoint}.`
-      : "Install the runtime first, then download or place the model manually.";
-
-  installRuntimeButton.disabled = !release.can_download_runtime;
-  downloadModelButton.disabled = !sharp.runtime_ready;
+  installRuntimeButton.disabled = sharp.runtime_ready || !release.can_download_runtime;
+  downloadModelButton.disabled = !sharp.runtime_ready || sharp.checkpoint_exists;
   openStudioButton.disabled = !sharp.runtime_ready;
 
-  if (!sharp.executable_exists) {
+  runtimeStatus.textContent = sharp.runtime_ready ? "Installed" : "Required";
+  runtimeHint.textContent = sharp.runtime_ready
+    ? `Runtime ready at ${sharp.executable}.`
+    : release.runtime_install_mode === "windows-local"
+      ? "The app will download Python, install SHARP locally, and validate the runtime here."
+      : "Install the runtime into this app folder before continuing.";
+
+  modelStatus.textContent = sharp.checkpoint_exists ? "Installed" : sharp.runtime_ready ? "Optional" : "Waiting";
+  modelHint.textContent = sharp.checkpoint_exists
+    ? `Model ready at ${sharp.checkpoint}.`
+    : sharp.runtime_ready
+      ? (sharp.preferred_checkpoint
+          ? `The Apple model will be saved to ${sharp.preferred_checkpoint}.`
+          : "The Apple model can be downloaded after runtime install.")
+      : "Install the runtime first, then this step becomes available.";
+
+  studioStatus.textContent = sharp.runtime_ready ? "Ready" : "Locked";
+  studioHint.textContent = sharp.runtime_ready
+    ? sharp.checkpoint_exists
+      ? "Everything is installed. Open the studio and run SHARP."
+      : "The studio is ready now. You can also download the model first if you want."
+    : "The studio unlocks as soon as the runtime install completes.";
+
+  setStepState(runtimeStep, sharp.runtime_ready ? "done" : "active");
+  setStepState(modelStep, !sharp.runtime_ready ? "locked" : sharp.checkpoint_exists ? "done" : "active");
+  setStepState(studioStep, !sharp.runtime_ready ? "locked" : "active");
+
+  if (!sharp.runtime_ready) {
     setActivity(
-      "Runtime required",
-      "Install the SHARP runtime first.",
+      "Install the runtime",
+      "Start with Step 1. The app will prepare this machine for local SHARP runs.",
       release.runtime_install_mode === "windows-local"
-        ? "The Lite build will download Python, install SHARP locally, and validate everything before opening the studio."
-        : "The Lite build keeps the runtime out of the zip so the first download stays smaller.",
+        ? "On Windows Lite this includes local Python setup, SHARP install, and validation before the studio opens."
+        : "The runtime will be downloaded into the app folder so the initial build stays smaller.",
+      "Step 1",
     );
     return;
   }
@@ -125,13 +161,19 @@ function applyStatus(payload) {
   if (!sharp.checkpoint_exists) {
     setActivity(
       "Runtime ready",
-      "The app can open the studio now.",
-      "You can also download the Apple model first so prediction runs do not pause on first fetch.",
+      "Step 1 is complete. You can open the studio now or install the Apple model first.",
+      "The model step is optional, but installing it now avoids a first-run download later.",
+      "Step 2",
     );
     return;
   }
 
-  setActivity("Ready", "Everything needed for local runs is installed.", "Open the studio and start a new SHARP run.");
+  setActivity(
+    "Setup complete",
+    "Everything needed for local runs is installed on this machine.",
+    "Open the studio and start a new SHARP run.",
+    "Ready",
+  );
 }
 
 async function refreshStatus() {
@@ -162,9 +204,9 @@ async function refreshTask(kind) {
   }
 
   if (kind === "runtime") {
-    renderTask(payload.task, runtimeProgressBar, runtimeProgressText, "No runtime download in progress.");
+    renderTask(payload.task, runtimeProgressBlock, runtimeProgressBar, runtimeProgressText, "No runtime install in progress.");
   } else {
-    renderTask(payload.task, modelProgressBar, modelProgressText, "No model download in progress.");
+    renderTask(payload.task, modelProgressBlock, modelProgressBar, modelProgressText, "No model download in progress.");
   }
 
   return payload.task;
@@ -183,40 +225,63 @@ function stopPolling(kind) {
 
 function startPolling(kind) {
   stopPolling(kind);
+
   if (kind === "runtime") {
     installRuntimeButton.disabled = true;
+    setStepState(runtimeStep, "active");
   } else {
     downloadModelButton.disabled = true;
+    setStepState(modelStep, "active");
   }
+
   const runner = async () => {
     try {
       const task = await refreshTask(kind);
       if (task.status !== "running") {
         stopPolling(kind);
         await refreshStatus();
-        installRuntimeButton.disabled = !currentConfig?.release?.can_download_runtime;
-        downloadModelButton.disabled = !currentConfig?.sharp?.runtime_ready;
+
         if (kind === "runtime" && task.status === "completed") {
-          setActivity("Runtime installed", `Installed the runtime to ${task.result_path}.`, "You can now open the studio or download the model.");
+          setActivity(
+            "Runtime installed",
+            `Step 1 finished. Runtime installed to ${task.result_path}.`,
+            "Continue to the optional model step or open the studio now.",
+            "Step 1",
+          );
         } else if (kind === "model" && task.status === "completed") {
-          setActivity("Model installed", `Saved the Apple model to ${task.result_path}.`, "The studio can now run predictions without waiting for a first-run download.");
+          setActivity(
+            "Model installed",
+            `Step 2 finished. Model saved to ${task.result_path}.`,
+            "The studio can now run without waiting for a first-run model fetch.",
+            "Step 2",
+          );
         } else if (task.status === "failed") {
-          const title = kind === "runtime" ? "Install failed" : "Model download failed";
-          const detail = kind === "runtime"
-            ? "Check the network or release metadata, then try again."
-            : "You can also place the model file in the runtime models folder manually.";
-          setActivity(title, task.error || task.message, detail);
+          const isRuntime = kind === "runtime";
+          setActivity(
+            isRuntime ? "Runtime install failed" : "Model download failed",
+            task.error || task.message,
+            isRuntime
+              ? "Retry Step 1 after checking the network and local folder permissions."
+              : "Retry Step 2, or place the model manually into the runtime models folder.",
+            isRuntime ? "Step 1" : "Step 2",
+          );
         }
       } else if (kind === "runtime") {
         setActivity(
           "Installing runtime",
           task.message,
           currentConfig?.release?.runtime_install_mode === "windows-local"
-            ? "The Lite build is preparing a local Python + SHARP runtime inside this app folder."
-            : "The Lite build is fetching the portable runtime into this app folder.",
+            ? "The app is preparing local Python, installing SHARP, and validating the runtime."
+            : "The app is downloading the runtime into this folder.",
+          "Step 1",
         );
       } else {
-        setActivity("Downloading model", task.message, "The Apple SHARP model is being saved into the runtime folder.");
+        setActivity(
+          "Downloading model",
+          task.message,
+          "The Apple SHARP model is being saved into the local runtime folder.",
+          "Step 2",
+        );
       }
     } catch (error) {
       console.error(error);
@@ -240,7 +305,8 @@ async function installRuntime() {
     currentConfig?.release?.runtime_install_mode === "windows-local"
       ? "Preparing Python and SHARP locally for this machine."
       : "Downloading the portable SHARP runtime.",
-    "This can take a while on the Lite build.",
+    "This is the main setup step. The next steps unlock when it finishes.",
+    "Step 1",
   );
 
   try {
@@ -249,17 +315,22 @@ async function installRuntime() {
     if (!response.ok) {
       throw new Error(payload.error || "Could not install the runtime.");
     }
-    renderTask(payload.task, runtimeProgressBar, runtimeProgressText, "No runtime download in progress.");
+    renderTask(payload.task, runtimeProgressBlock, runtimeProgressBar, runtimeProgressText, "No runtime install in progress.");
     startPolling("runtime");
   } catch (error) {
     console.error(error);
-    setActivity("Install failed", error.message, "Check the network or release metadata, then try again.");
+    setActivity("Runtime install failed", error.message, "Retry Step 1 after checking the network and local folder permissions.", "Step 1");
   }
 }
 
 async function downloadModel() {
   downloadModelButton.disabled = true;
-  setActivity("Downloading model", "Fetching the Apple SHARP model.", "The file will be saved inside the local runtime folder.");
+  setActivity(
+    "Downloading model",
+    "Fetching the Apple SHARP model.",
+    "The file will be stored in the local runtime folder for future runs.",
+    "Step 2",
+  );
 
   try {
     const response = await fetch("/api/setup/download-checkpoint", { method: "POST" });
@@ -267,11 +338,11 @@ async function downloadModel() {
     if (!response.ok) {
       throw new Error(payload.error || "Could not download the Apple model.");
     }
-    renderTask(payload.task, modelProgressBar, modelProgressText, "No model download in progress.");
+    renderTask(payload.task, modelProgressBlock, modelProgressBar, modelProgressText, "No model download in progress.");
     startPolling("model");
   } catch (error) {
     console.error(error);
-    setActivity("Model download failed", error.message, "You can also place the model file in the runtime models folder manually.");
+    setActivity("Model download failed", error.message, "Retry Step 2, or place the model manually into the runtime models folder.", "Step 2");
   }
 }
 
@@ -286,7 +357,7 @@ openStudioButton.addEventListener("click", openStudio);
 
 refreshStatus().catch((error) => {
   console.error(error);
-  setActivity("Setup unavailable", error.message, "Reload the page after the local app finishes starting.");
+  setActivity("Setup unavailable", error.message, "Reload the page after the local app finishes starting.", "Error");
 });
 
 Promise.allSettled([refreshTask("runtime"), refreshTask("model")]).then((results) => {
