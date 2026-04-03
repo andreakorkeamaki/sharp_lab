@@ -41,15 +41,17 @@ sharp_lab/
 
 For the simplest macOS or Windows install, download the latest full release asset from GitHub:
 
-- `sharp-lab-macos.zip`
-- `sharp-lab-windows.zip`
+- `sharp-lab-macos-v0.1.7.zip`
+- `sharp-lab-windows-v0.1.7.zip`
 
 The release workflow now also produces:
 
-- `sharp-lab-macos-lite.zip`
-- `sharp-lab-windows-lite.zip`
-- `sharp-lab-runtime-macos.zip`
-- `sharp-lab-runtime-windows.zip`
+- `sharp-lab-macos-lite-v0.1.7.zip`
+- `sharp-lab-windows-lite-v0.1.7.zip`
+- `sharp-lab-runtime-macos-v0.1.7.zip`
+- `sharp-lab-runtime-windows-v0.1.7.zip`
+- `sharp-lab-blender-addon-macos-v0.1.7.zip`
+- `sharp-lab-blender-addon-windows-v0.1.7.zip`
 
 Unzip it and launch:
 
@@ -80,6 +82,8 @@ The repo includes a release workflow at `.github/workflows/release.yml`. Pushing
 - a wheel
 - a standalone macOS executable zip
 - a standalone Windows executable zip
+- a Blender add-on zip for macOS
+- a Blender add-on zip for Windows
 
 ### Install from source
 
