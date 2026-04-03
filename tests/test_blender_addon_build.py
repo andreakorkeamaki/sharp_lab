@@ -48,7 +48,7 @@ class BlenderAddonBuildTests(unittest.TestCase):
             site_packages = runtime_dir / ".venv" / "Lib" / "site-packages"
             site_packages.mkdir(parents=True)
             (site_packages / "sharp_lab_placeholder.py").write_text("value = 1\n", encoding="utf-8")
-            (site_packages / "__editable__.sharp_lab-0.1.7.pth").write_text("remove me\n", encoding="utf-8")
+            (site_packages / "__editable__.sharp_lab-0.1.8.pth").write_text("remove me\n", encoding="utf-8")
             (runtime_dir / "build-info.json").write_text('{"name":"runtime"}', encoding="utf-8")
             (runtime_dir / "licenses").mkdir()
             (runtime_dir / "licenses" / "README.md").write_text("license", encoding="utf-8")
@@ -67,7 +67,7 @@ class BlenderAddonBuildTests(unittest.TestCase):
 
             self.assertTrue((destination / "python" / "tools" / "python.exe").exists())
             self.assertTrue((destination / "python" / "tools" / "Lib" / "site-packages" / "sharp_lab_placeholder.py").exists())
-            self.assertFalse((destination / "python" / "tools" / "Lib" / "site-packages" / "__editable__.sharp_lab-0.1.7.pth").exists())
+            self.assertFalse((destination / "python" / "tools" / "Lib" / "site-packages" / "__editable__.sharp_lab-0.1.8.pth").exists())
             self.assertTrue((destination / "run-sharp.cmd").exists())
 
 

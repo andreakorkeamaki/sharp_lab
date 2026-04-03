@@ -13,13 +13,13 @@ The script writes the archive to `dist/sharp-lab-blender-addon.zip`.
 For CI or release builds, point it at a prepared runtime directory:
 
 ```bash
-python scripts/build_blender_addon.py --runtime-dir runtime --output dist/sharp-lab-blender-addon-macos-v0.1.7.zip
+python scripts/build_blender_addon.py --runtime-dir runtime --output dist/sharp-lab-blender-addon-macos-v0.1.8.zip
 ```
 
 On Windows, build the portable add-on with:
 
 ```bash
-python scripts/build_blender_addon_windows.py --runtime-dir runtime --python-nupkg dist/python.3.11.9.nupkg --output dist/sharp-lab-blender-addon-windows-v0.1.7.zip
+python scripts/build_blender_addon_windows.py --runtime-dir runtime --python-nupkg dist/python.3.11.9.nupkg --output dist/sharp-lab-blender-addon-windows-v0.1.8.zip
 ```
 
 Install it in Blender with:

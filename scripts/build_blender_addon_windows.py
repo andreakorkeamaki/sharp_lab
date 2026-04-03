@@ -11,7 +11,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 ADDON_SOURCE_DIR = ROOT / "blender_addon" / "sharp_lab_blender"
 PACKAGE_SOURCE_DIR = ROOT / "src" / "sharp_lab"
-WINDOWS_RUNTIME_ARCHIVE = ROOT / "dist" / "sharp-lab-runtime-windows-v0.1.7.zip"
+WINDOWS_RUNTIME_ARCHIVE = ROOT / "dist" / "sharp-lab-runtime-windows.zip"
 WINDOWS_PYTHON_NUPKG = ROOT / "dist" / "python.3.11.9.nupkg"
 BUILD_ROOT = ROOT / "build" / "blender_addon_windows"
 DIST_PATH = ROOT / "dist" / "sharp-lab-blender-addon-windows.zip"
@@ -66,8 +66,7 @@ def _copy_site_packages(source_runtime_dir: Path, destination_python_dir: Path) 
         shutil.rmtree(destination_site_packages)
     shutil.copytree(source_site_packages, destination_site_packages, ignore=IGNORE_PATTERNS)
 
-    editable_pth = destination_site_packages / "__editable__.sharp_lab-0.1.7.pth"
-    if editable_pth.exists():
+    for editable_pth in destination_site_packages.glob("__editable__.sharp_lab-*.pth"):
         editable_pth.unlink()
 
 

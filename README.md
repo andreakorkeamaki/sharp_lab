@@ -41,17 +41,17 @@ sharp_lab/
 
 For the simplest macOS or Windows install, download the latest full release asset from GitHub:
 
-- `sharp-lab-macos-v0.1.7.zip`
-- `sharp-lab-windows-v0.1.7.zip`
+- `sharp-lab-macos-<tag>.zip`
+- `sharp-lab-windows-<tag>.zip`
 
 The release workflow now also produces:
 
-- `sharp-lab-macos-lite-v0.1.7.zip`
-- `sharp-lab-windows-lite-v0.1.7.zip`
-- `sharp-lab-runtime-macos-v0.1.7.zip`
-- `sharp-lab-runtime-windows-v0.1.7.zip`
-- `sharp-lab-blender-addon-macos-v0.1.7.zip`
-- `sharp-lab-blender-addon-windows-v0.1.7.zip`
+- `sharp-lab-macos-lite-<tag>.zip`
+- `sharp-lab-windows-lite-<tag>.zip`
+- `sharp-lab-runtime-macos-<tag>.zip`
+- `sharp-lab-runtime-windows-<tag>.zip`
+- `sharp-lab-blender-addon-macos-<tag>.zip`
+- `sharp-lab-blender-addon-windows-<tag>.zip`
 
 Unzip it and launch:
 
@@ -76,7 +76,7 @@ When that folder exists, the release workflow bundles it into the downloadable z
 
 If the SHARP executable is present but the checkpoint file is not bundled, the app now offers a first-run "Download Apple Model" action in the UI. In the Lite build, the setup page also offers an "Install Runtime" action before you enter the studio. On Windows, that action performs a full local bootstrap of Python and SHARP inside the app folder, then validates the install before unlocking the studio. You can also let the SHARP CLI download the checkpoint automatically on the first prediction run and cache it under `~/.cache/torch/hub/checkpoints/`.
 
-The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.7` builds:
+The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.8` builds:
 
 - a source distribution
 - a wheel
