@@ -56,31 +56,28 @@ jobs:
           fi
           pyinstaller sharp_lab.spec --noconfirm --clean
 
-      - name: Prepare Blender add-on bundle
+      - name: Prepare Blender add-on bundle (macOS)
+        if: matrix.platform_slug == 'macos'
         shell: bash
         env:
-          PLATFORM_SLUG: ${{ matrix.platform_slug }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$PLATFORM_SLUG" = "macos" ]; then
-            python scripts/build_blender_addon.py \
-              --runtime-dir runtime \
-              --output "dist/sharp-lab-blender-addon-macos-${GITHUB_REF_NAME}.zip"
-          else
-            python - <<'PY'
-            from pathlib import Path
-            from urllib.request import urlretrieve
+          python scripts/build_blender_addon.py \
+            --runtime-dir runtime \
+            --output "dist/sharp-lab-blender-addon-macos-${GITHUB_REF_NAME}.zip"
 
-            output = Path("dist/python.3.11.9.nupkg")
-            output.parent.mkdir(parents=True, exist_ok=True)
-            urlretrieve("https://globalcdn.nuget.org/packages/python.3.11.9.nupkg", output)
-            print(output)
-            PY
-            python scripts/build_blender_addon_windows.py \
-              --runtime-dir runtime \
-              --python-nupkg dist/python.3.11.9.nupkg \
-              --output "dist/sharp-lab-blender-addon-windows-${GITHUB_REF_NAME}.zip"
-          fi
+      - name: Prepare Blender add-on bundle (Windows)
+        if: matrix.platform_slug == 'windows'
+        shell: bash
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          curl -fsSL -o dist/python.3.11.9.nupkg \
+            https://globalcdn.nuget.org/packages/python.3.11.9.nupkg
+          python scripts/build_blender_addon_windows.py \
+            --runtime-dir runtime \
+            --python-nupkg dist/python.3.11.9.nupkg \
+            --output "dist/sharp-lab-blender-addon-windows-${GITHUB_REF_NAME}.zip"
 
       - name: Archive standalone build
         shell: bash
