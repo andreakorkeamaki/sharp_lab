@@ -1,7 +1,8 @@
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 datas = collect_data_files("sharp_lab")
+hiddenimports = collect_submodules("webview")
 
 
 a = Analysis(
@@ -9,7 +10,7 @@ a = Analysis(
     pathex=["src"],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -24,6 +24,7 @@ setup(
         "release": [
             "build>=1.2",
             "pyinstaller>=6.0",
+            "pywebview>=5.0",
         ],
     },
 )

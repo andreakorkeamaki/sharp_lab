@@ -23,6 +23,14 @@ const modelProgressBar = document.getElementById("model-progress-bar");
 const modelProgressText = document.getElementById("model-progress-text");
 const downloadModelButton = document.getElementById("download-model");
 
+const blenderStep = document.getElementById("blender-step");
+const blenderStatus = document.getElementById("blender-status");
+const blenderHint = document.getElementById("blender-hint");
+const blenderProgressBlock = document.getElementById("blender-progress-block");
+const blenderProgressBar = document.getElementById("blender-progress-bar");
+const blenderProgressText = document.getElementById("blender-progress-text");
+const downloadBlenderAddonButton = document.getElementById("download-blender-addon");
+
 const studioStep = document.getElementById("studio-step");
 const studioStatus = document.getElementById("studio-status");
 const studioHint = document.getElementById("studio-hint");
@@ -31,6 +39,7 @@ const openStudioButton = document.getElementById("open-studio");
 let currentConfig = null;
 let runtimePoller = null;
 let modelPoller = null;
+let blenderPoller = null;
 
 function setActivity(title, message, detail, badge = "Preparing") {
   activityTitle.textContent = title;
@@ -109,9 +118,11 @@ function renderTask(task, progressBlock, progressBar, progressText, idleText) {
 
 function applyStatus(payload) {
   currentConfig = payload;
-  const { sharp, release } = payload;
+  const { sharp, release, blender_addon: blenderAddon } = payload;
   const isComplete = sharp.runtime_ready && sharp.checkpoint_exists;
   const canInstallRuntime = Boolean(release.can_download_runtime);
+  const canDownloadBlenderAddon = Boolean(blenderAddon?.available);
+  const blenderAddonDownloaded = Boolean(blenderAddon?.downloaded);
 
   workspacePath.textContent = payload.workspace;
   setupShell?.classList.toggle("is-complete", isComplete);
@@ -128,9 +139,11 @@ function applyStatus(payload) {
       ? "Install Runtime"
       : "Runtime Not Bundled";
   downloadModelButton.textContent = sharp.checkpoint_exists ? "Model Installed" : "Download Model";
+  downloadBlenderAddonButton.textContent = blenderAddonDownloaded ? "Add-on Downloaded" : "Download Add-on";
 
   installRuntimeButton.disabled = sharp.runtime_ready || !canInstallRuntime;
   downloadModelButton.disabled = !sharp.runtime_ready || sharp.checkpoint_exists;
+  downloadBlenderAddonButton.disabled = !canDownloadBlenderAddon || blenderAddonDownloaded;
   openStudioButton.disabled = !sharp.runtime_ready;
 
   runtimeStatus.textContent = sharp.runtime_ready ? "Installed" : "Required";
@@ -151,6 +164,13 @@ function applyStatus(payload) {
           : "The Apple model can be downloaded after runtime install.")
       : "Install the runtime first, then this step becomes available.";
 
+  blenderStatus.textContent = blenderAddonDownloaded ? "Downloaded" : canDownloadBlenderAddon ? "Optional" : "Unavailable";
+  blenderHint.textContent = blenderAddonDownloaded
+    ? `Add-on zip ready at ${blenderAddon.path}. Install it from Blender Preferences when you need Blender import.`
+    : canDownloadBlenderAddon
+      ? `Download the Blender add-on zip into ${blenderAddon.folder}.`
+      : "This build does not declare a Blender add-on download for this platform.";
+
   studioStatus.textContent = sharp.runtime_ready ? "Ready" : "Locked";
   studioHint.textContent = sharp.runtime_ready
     ? sharp.checkpoint_exists
@@ -160,6 +180,7 @@ function applyStatus(payload) {
 
   setStepState(runtimeStep, sharp.runtime_ready ? "done" : "active");
   setStepState(modelStep, !sharp.runtime_ready ? "locked" : sharp.checkpoint_exists ? "done" : "active");
+  setStepState(blenderStep, blenderAddonDownloaded ? "done" : canDownloadBlenderAddon ? "active" : "locked");
   setStepState(studioStep, !sharp.runtime_ready ? "locked" : "active");
 
   if (!sharp.runtime_ready) {
@@ -190,8 +211,12 @@ function applyStatus(payload) {
 
   setActivity(
     "Setup complete",
-    "Everything needed for local runs is installed on this machine.",
-    "Open the studio and start a new SHARP run. You can always come back here later if you want to manage setup again.",
+    blenderAddonDownloaded
+      ? "Everything needed for local runs is installed on this machine, and the Blender add-on zip is ready."
+      : "Everything needed for local runs is installed on this machine.",
+    blenderAddonDownloaded
+      ? "Open the studio, or install the downloaded zip from Blender Preferences when you want to use Blender."
+      : "Open the studio and start a new SHARP run. You can always come back here later if you want the Blender add-on.",
     "Ready",
   );
 }
@@ -220,13 +245,16 @@ async function refreshTask(kind) {
       ...currentConfig,
       sharp: payload.sharp,
       release: payload.release,
+      blender_addon: payload.blender_addon || currentConfig.blender_addon,
     });
   }
 
   if (kind === "runtime") {
     renderTask(payload.task, runtimeProgressBlock, runtimeProgressBar, runtimeProgressText, "No runtime install in progress.");
-  } else {
+  } else if (kind === "model") {
     renderTask(payload.task, modelProgressBlock, modelProgressBar, modelProgressText, "No model download in progress.");
+  } else {
+    renderTask(payload.task, blenderProgressBlock, blenderProgressBar, blenderProgressText, "No Blender add-on download in progress.");
   }
 
   return payload.task;
@@ -241,6 +269,10 @@ function stopPolling(kind) {
     clearInterval(modelPoller);
     modelPoller = null;
   }
+  if (kind === "blender-addon" && blenderPoller) {
+    clearInterval(blenderPoller);
+    blenderPoller = null;
+  }
 }
 
 function startPolling(kind) {
@@ -249,9 +281,12 @@ function startPolling(kind) {
   if (kind === "runtime") {
     installRuntimeButton.disabled = true;
     setStepState(runtimeStep, "active");
-  } else {
+  } else if (kind === "model") {
     downloadModelButton.disabled = true;
     setStepState(modelStep, "active");
+  } else {
+    downloadBlenderAddonButton.disabled = true;
+    setStepState(blenderStep, "active");
   }
 
   const runner = async () => {
@@ -275,15 +310,25 @@ function startPolling(kind) {
             "The studio can now run without waiting for a first-run model fetch.",
             "Step 2",
           );
+        } else if (kind === "blender-addon" && task.status === "completed") {
+          setActivity(
+            "Blender add-on downloaded",
+            `Step 3 finished. Add-on saved to ${task.result_path}.`,
+            "Install this zip from Blender Preferences when you want Blender to read the same Sharp Lab workspace.",
+            "Step 3",
+          );
         } else if (task.status === "failed") {
           const isRuntime = kind === "runtime";
+          const isBlender = kind === "blender-addon";
           setActivity(
-            isRuntime ? "Runtime install failed" : "Model download failed",
+            isRuntime ? "Runtime install failed" : isBlender ? "Blender add-on download failed" : "Model download failed",
             task.error || task.message,
             isRuntime
               ? "Retry Step 1 after checking the network and local folder permissions."
-              : "Retry Step 2, or place the model manually into the runtime models folder.",
-            isRuntime ? "Step 1" : "Step 2",
+              : isBlender
+                ? "Retry Step 3 after checking the network and local folder permissions."
+                : "Retry Step 2, or place the model manually into the runtime models folder.",
+            isRuntime ? "Step 1" : isBlender ? "Step 3" : "Step 2",
           );
         }
       } else if (kind === "runtime") {
@@ -297,12 +342,19 @@ function startPolling(kind) {
           ),
           "Step 1",
         );
-      } else {
+      } else if (kind === "model") {
         setActivity(
           "Downloading model",
           task.message,
           task.detail || "The Apple SHARP model is being saved into the local runtime folder.",
           "Step 2",
+        );
+      } else if (kind === "blender-addon") {
+        setActivity(
+          "Downloading Blender add-on",
+          task.message,
+          task.detail || "The Blender add-on zip is being saved next to this Sharp Lab app.",
+          "Step 3",
         );
       }
     } catch (error) {
@@ -315,8 +367,10 @@ function startPolling(kind) {
   const intervalId = window.setInterval(runner, 700);
   if (kind === "runtime") {
     runtimePoller = intervalId;
-  } else {
+  } else if (kind === "model") {
     modelPoller = intervalId;
+  } else {
+    blenderPoller = intervalId;
   }
 }
 
@@ -368,6 +422,29 @@ async function downloadModel() {
   }
 }
 
+async function downloadBlenderAddon() {
+  downloadBlenderAddonButton.disabled = true;
+  setActivity(
+    "Downloading Blender add-on",
+    "Fetching the Sharp Lab Blender add-on zip.",
+    "The file will be stored next to this Sharp Lab app so Blender can use the same workspace.",
+    "Step 3",
+  );
+
+  try {
+    const response = await fetch("/api/setup/download-blender-addon", { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not download the Blender add-on.");
+    }
+    renderTask(payload.task, blenderProgressBlock, blenderProgressBar, blenderProgressText, "No Blender add-on download in progress.");
+    startPolling("blender-addon");
+  } catch (error) {
+    console.error(error);
+    setActivity("Blender add-on download failed", error.message, "Retry Step 3 after checking the network and local folder permissions.", "Step 3");
+  }
+}
+
 function openStudio() {
   const path = currentConfig?.release?.studio_path || "/studio";
   window.location.href = path;
@@ -375,6 +452,7 @@ function openStudio() {
 
 installRuntimeButton.addEventListener("click", installRuntime);
 downloadModelButton.addEventListener("click", downloadModel);
+downloadBlenderAddonButton.addEventListener("click", downloadBlenderAddon);
 openStudioButton.addEventListener("click", openStudio);
 
 refreshStatus().catch((error) => {
@@ -382,13 +460,17 @@ refreshStatus().catch((error) => {
   setActivity("Setup unavailable", error.message, "Reload the page after the local app finishes starting.", "Error");
 });
 
-Promise.allSettled([refreshTask("runtime"), refreshTask("model")]).then((results) => {
+Promise.allSettled([refreshTask("runtime"), refreshTask("model"), refreshTask("blender-addon")]).then((results) => {
   const runtimeTask = results[0].status === "fulfilled" ? results[0].value : null;
   const modelTask = results[1].status === "fulfilled" ? results[1].value : null;
+  const blenderTask = results[2].status === "fulfilled" ? results[2].value : null;
   if (runtimeTask?.status === "running") {
     startPolling("runtime");
   }
   if (modelTask?.status === "running") {
     startPolling("model");
+  }
+  if (blenderTask?.status === "running") {
+    startPolling("blender-addon");
   }
 });
