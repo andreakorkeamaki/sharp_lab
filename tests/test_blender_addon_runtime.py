@@ -172,6 +172,34 @@ class BlenderAddonRuntimeTests(unittest.TestCase):
             self.assertTrue(prefs.setup_completed)
             self.assertEqual(props.status_message, "Apple SHARP model is ready.")
 
+    def test_saved_windows_runtime_is_used_when_bundled_template_is_missing(self) -> None:
+        addon = _load_addon_module()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            runtime_dir = temp_root / "workspace" / "runtime"
+            (runtime_dir / "python" / "tools").mkdir(parents=True)
+            (runtime_dir / "python" / "tools" / "python.exe").write_text("", encoding="utf-8")
+            launcher = runtime_dir / "run-sharp.cmd"
+            launcher.write_text(
+                '"%PYTHON_DIR%\\tools\\python.exe" "%RUNTIME_DIR%\\sharp_bootstrap.py" %*\n',
+                encoding="utf-8",
+            )
+            checkpoint = runtime_dir / "models" / "sharp_2572gikvuh.pt"
+            checkpoint.parent.mkdir(parents=True)
+            checkpoint.write_text("model", encoding="utf-8")
+            context, prefs, _props = _make_context(addon, temp_root / "workspace")
+            prefs.executable_path = str(launcher)
+            prefs.checkpoint_path = str(checkpoint)
+            missing_template = temp_root / "missing-runtime-template"
+
+            with mock.patch.object(addon, "os", SimpleNamespace(name="nt")):
+                addon._BUNDLED_RUNTIME_DIR = missing_template
+                resolved_runtime = addon._ensure_workspace_runtime(context)
+
+            self.assertEqual(resolved_runtime, runtime_dir.resolve())
+            self.assertEqual(Path(prefs.executable_path), launcher.resolve())
+            self.assertEqual(Path(prefs.checkpoint_path), checkpoint.resolve())
+
 
 if __name__ == "__main__":
     unittest.main()

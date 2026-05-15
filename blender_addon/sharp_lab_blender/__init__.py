@@ -32,7 +32,7 @@ from sharp_lab.sharp.integration import DEFAULT_MODEL_FILENAME, SharpIntegration
 bl_info = {
     "name": "Sharp Lab",
     "author": "Andrea Korkeamaki",
-    "version": (0, 1, 10),
+    "version": (0, 1, 11),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Sharp Lab",
     "description": "Run Apple SHARP from Blender and import the generated PLY into the scene.",
@@ -138,6 +138,8 @@ def _configured_runtime_path(prefs: "SharpLabAddonPreferences") -> Path:
 def _configured_checkpoint_path(prefs: "SharpLabAddonPreferences") -> Path:
     if prefs.checkpoint_path.strip():
         return Path(prefs.checkpoint_path).expanduser()
+    if prefs.executable_path.strip():
+        return Path(prefs.executable_path).expanduser().parent / "models" / DEFAULT_MODEL_FILENAME
     return _runtime_checkpoint_path(_runtime_root(_workspace_root(prefs.workspace_path)))
 
 
@@ -198,6 +200,16 @@ def _repair_posix_runtime_permissions(runtime_dir: Path) -> None:
 
 def _ensure_workspace_runtime(context: bpy.types.Context) -> Path:
     prefs = _addon_prefs(context)
+    configured_executable = Path(prefs.executable_path).expanduser() if prefs.executable_path.strip() else None
+    if configured_executable is not None and configured_executable.exists():
+        runtime_dir = configured_executable.parent.resolve()
+        _repair_posix_runtime_permissions(runtime_dir)
+        prefs.executable_path = str(configured_executable.resolve())
+        checkpoint_path = _configured_checkpoint_path(prefs)
+        if checkpoint_path.exists():
+            prefs.checkpoint_path = str(checkpoint_path.resolve())
+        return runtime_dir
+
     workspace_root = _workspace_root(prefs.workspace_path)
     runtime_dir = _runtime_root(workspace_root)
     runtime_executable = _runtime_executable_path(runtime_dir)
@@ -272,7 +284,7 @@ def _ensure_model_checkpoint(
 
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
     prefs.checkpoint_path = str(checkpoint)
-    executable = _runtime_executable_path(runtime_dir)
+    executable = _configured_runtime_path(prefs)
     service = _build_download_service(executable, checkpoint, prefs.default_device)
     downloaded = service.download_default_checkpoint(progress_callback=progress_callback)
     prefs.checkpoint_path = str(downloaded)
@@ -441,7 +453,7 @@ class SHARPLAB_OT_run(Operator):
         progress_started = False
         try:
             runtime_dir = _ensure_workspace_runtime(context)
-            executable = _runtime_executable_path(runtime_dir)
+            executable = _configured_runtime_path(prefs)
             prefs.executable_path = str(executable)
             checkpoint = _configured_checkpoint_path(prefs)
             if not checkpoint.exists():
@@ -569,7 +581,7 @@ class SHARPLAB_OT_download_model(Operator):
 
         try:
             runtime_dir = _ensure_workspace_runtime(context)
-            executable = _runtime_executable_path(runtime_dir)
+            executable = _configured_runtime_path(prefs)
             prefs.executable_path = str(executable)
             checkpoint = _configured_checkpoint_path(prefs)
             if checkpoint.exists():
@@ -729,7 +741,7 @@ class SHARPLAB_PT_panel(Panel):
 
         status_box = layout.box()
         status_box.label(text="Configuration")
-        status_box.label(text=f"Bundled Runtime: {'included' if bundled_runtime else 'missing'}")
+        status_box.label(text=f"Bundled Runtime: {'included' if bundled_runtime else 'not needed'}")
         if runtime_ready:
             status_box.label(text=f"Runtime: ready ({configured_runtime.name})")
         elif bundled_runtime:
