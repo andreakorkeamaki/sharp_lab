@@ -100,6 +100,9 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/setup/download-checkpoint":
             self._handle_download_checkpoint()
             return
+        if parsed.path == "/api/setup/download-blender-addon":
+            self._handle_download_blender_addon()
+            return
 
         if parsed.path == "/api/predict":
             self._handle_predict()
@@ -121,6 +124,7 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             "runs_dir": str(self.server.app.config.paths.runs),
             "sharp": status,
             "release": self.server.app.release_status(),
+            "blender_addon": self.server.app.blender_addon_status(),
             "web": {
                 "host": self.server.app.config.web.host,
                 "port": self.server.app.config.web.port,
@@ -243,6 +247,23 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             status=HTTPStatus.ACCEPTED,
         )
 
+    def _handle_download_blender_addon(self) -> None:
+        try:
+            task = self.server.app.start_blender_addon_download()
+        except Exception as exc:
+            LOGGER.exception("Blender add-on download failed")
+            self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_json(
+            {
+                "task": task,
+                "blender_addon": self.server.app.blender_addon_status(),
+                "release": self.server.app.release_status(),
+            },
+            status=HTTPStatus.ACCEPTED,
+        )
+
     def _handle_decimate(self, path: str) -> None:
         parts = [part for part in path.split("/") if part]
         if len(parts) != 4:
@@ -283,12 +304,13 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
 
     def _download_status_payload(self, path: str) -> dict[str, object]:
         kind = path.removeprefix("/api/setup/downloads/").strip("/")
-        if kind not in {"runtime", "model"}:
+        if kind not in {"runtime", "model", "blender-addon"}:
             raise FileNotFoundError(f"Unknown download kind: {kind}")
         return {
             "task": self.server.app.download_status(kind),
             "sharp": self.server.app.sharp_status(),
             "release": self.server.app.release_status(),
+            "blender_addon": self.server.app.blender_addon_status(),
         }
 
 

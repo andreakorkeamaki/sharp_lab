@@ -13,7 +13,13 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from sharp_lab.release import RELEASE_MANIFEST_FILE, ReleaseManifest, RuntimeInstallService, _parse_install_output_line
+from sharp_lab.release import (
+    RELEASE_MANIFEST_FILE,
+    BlenderAddonDownloadService,
+    ReleaseManifest,
+    RuntimeInstallService,
+    _parse_install_output_line,
+)
 
 
 class FakeDownloadResponse(io.BytesIO):
@@ -60,6 +66,28 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(manifest.runtime_install_mode, "archive")
             self.assertEqual(manifest.to_dict()["can_install_runtime"], bool(manifest.runtime_archive_url))
 
+    def test_load_release_manifest_reads_blender_addon_url(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / RELEASE_MANIFEST_FILE).write_text(
+                json.dumps(
+                    {
+                        "blender_addon_url": "https://example.com/sharp-lab-blender-addon.zip",
+                        "release_repository": "owner/repo",
+                        "release_version": "v1.2.3",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = ReleaseManifest.load(root)
+
+            self.assertEqual(
+                manifest.blender_addon_download_url,
+                "https://example.com/sharp-lab-blender-addon.zip",
+            )
+            self.assertTrue(manifest.to_dict()["can_download_blender_addon"])
+
     def test_load_release_manifest_reads_windows_local_bootstrap_settings(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -102,6 +130,23 @@ class ReleaseTests(unittest.TestCase):
 
             self.assertEqual(runtime_path, (root / "runtime").resolve())
             self.assertTrue((root / "runtime" / "run-sharp.cmd").exists())
+
+    def test_blender_addon_download_service_saves_release_zip(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            service = BlenderAddonDownloadService(root)
+            manifest = ReleaseManifest(blender_addon_url="https://example.com/sharp-lab-blender-addon-test.zip")
+
+            with mock.patch(
+                "sharp_lab.downloads.urlopen",
+                return_value=FakeDownloadResponse(b"zip-data"),
+            ):
+                addon_path = service.download_from_manifest(manifest)
+
+            self.assertEqual(addon_path, (root / "blender_addon" / "sharp-lab-blender-addon-test.zip").resolve())
+            self.assertEqual(addon_path.read_bytes(), b"zip-data")
+            status = service.status(manifest)
+            self.assertTrue(status["downloaded"])
 
     def test_runtime_install_service_accepts_nested_runtime_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

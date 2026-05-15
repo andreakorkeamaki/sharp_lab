@@ -10,7 +10,7 @@
     <main class="setup-shell">
       <section class="wizard-hero">
         <p class="eyebrow">sharp_lab lite</p>
-        <h1>Set up this machine in 3 steps.</h1>
+        <h1>Set up this machine and Blender.</h1>
         <p id="hero-hint" class="lede">
           This build installs only what is needed on this PC. Start with the runtime, then add the Apple model if you want faster first runs.
         </p>
@@ -26,7 +26,7 @@
           <p id="activity-badge" class="activity-badge">Preparing</p>
         </div>
         <p id="activity-message" class="activity-message">Loading setup status.</p>
-        <p id="activity-detail" class="hint">The assistant will guide you through runtime install, optional model download, and studio launch.</p>
+        <p id="activity-detail" class="hint">The assistant will guide you through runtime install, optional model and Blender add-on downloads, and studio launch.</p>
 
         <div class="step-list">
           <article id="runtime-step" class="step-card">
@@ -65,9 +65,27 @@
             </div>
           </article>
 
-          <article id="studio-step" class="step-card">
+          <article id="blender-step" class="step-card">
             <div class="step-copy">
               <p class="step-number">Step 3</p>
+              <h3 id="blender-title">Download Blender add-on</h3>
+              <p id="blender-hint" class="hint">Save the Blender add-on zip next to this Sharp Lab app.</p>
+            </div>
+            <div class="step-action">
+              <p id="blender-status" class="step-status">Checking</p>
+              <button id="download-blender-addon" type="button" class="secondary">Download Add-on</button>
+            </div>
+            <div id="blender-progress-block" class="progress-block is-hidden">
+              <div class="progress-track" aria-hidden="true">
+                <div id="blender-progress-bar" class="progress-bar"></div>
+              </div>
+              <p id="blender-progress-text" class="hint">No Blender add-on download in progress.</p>
+            </div>
+          </article>
+
+          <article id="studio-step" class="step-card">
+            <div class="step-copy">
+              <p class="step-number">Step 4</p>
               <h3 id="studio-title">Open studio</h3>
               <p id="studio-hint" class="hint">The studio unlocks as soon as the runtime is ready.</p>
             </div>

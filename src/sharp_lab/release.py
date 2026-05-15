@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from typing import Callable
+from urllib.parse import unquote, urlparse
 import zipfile
 
 from sharp_lab.downloads import ProgressCallback, download_to_path
@@ -20,6 +21,8 @@ DEFAULT_PYTHON_VERSION = "3.11.9"
 DEFAULT_SHARP_REPO_URL = "https://github.com/apple/ml-sharp.git"
 DEFAULT_SHARP_REPO_REF = "1eaa046834b81852261262b41b0919f5c1efdd2e"
 DEFAULT_SHARP_SOURCE_URL = f"https://github.com/apple/ml-sharp/archive/{DEFAULT_SHARP_REPO_REF}.zip"
+DEFAULT_RELEASE_REPOSITORY = "andreakorkeamaki/sharp_lab"
+DEFAULT_RELEASE_VERSION = "v0.1.15"
 
 
 StatusCallback = Callable[[str, float | None, str | None], None]
@@ -37,6 +40,9 @@ class ReleaseManifest:
     sharp_repo_url: str = DEFAULT_SHARP_REPO_URL
     sharp_repo_ref: str = DEFAULT_SHARP_REPO_REF
     model_url: str = DEFAULT_MODEL_URL
+    blender_addon_url: str | None = None
+    release_repository: str = DEFAULT_RELEASE_REPOSITORY
+    release_version: str = DEFAULT_RELEASE_VERSION
     studio_path: str = "/studio"
     setup_path: str = "/setup"
 
@@ -58,6 +64,9 @@ class ReleaseManifest:
             sharp_repo_url=str(payload.get("sharp_repo_url", DEFAULT_SHARP_REPO_URL)),
             sharp_repo_ref=str(payload.get("sharp_repo_ref", DEFAULT_SHARP_REPO_REF)),
             model_url=str(payload.get("model_url", DEFAULT_MODEL_URL)),
+            blender_addon_url=payload.get("blender_addon_url"),
+            release_repository=str(payload.get("release_repository", DEFAULT_RELEASE_REPOSITORY)),
+            release_version=str(payload.get("release_version", DEFAULT_RELEASE_VERSION)),
             studio_path=str(payload.get("studio_path", "/studio")),
             setup_path=str(payload.get("setup_path", "/setup")),
         )
@@ -78,12 +87,73 @@ class ReleaseManifest:
             return bool(self.runtime_archive_url)
         return False
 
+    @property
+    def blender_addon_download_url(self) -> str | None:
+        if self.blender_addon_url:
+            return self.blender_addon_url
+
+        platform_slug = _platform_slug()
+        if platform_slug not in {"macos", "windows"}:
+            return None
+
+        filename = f"sharp-lab-blender-addon-{platform_slug}-{self.release_version}.zip"
+        return f"https://github.com/{self.release_repository}/releases/download/{self.release_version}/{filename}"
+
+    @property
+    def can_download_blender_addon(self) -> bool:
+        return bool(self.blender_addon_download_url)
+
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
         payload["landing_path"] = self.landing_path
         payload["can_install_runtime"] = self.can_install_runtime
         payload["can_download_runtime"] = self.can_install_runtime
+        payload["blender_addon_download_url"] = self.blender_addon_download_url
+        payload["can_download_blender_addon"] = self.can_download_blender_addon
         return payload
+
+
+class BlenderAddonDownloadService:
+    def __init__(self, root_dir: Path) -> None:
+        self.root_dir = root_dir.resolve()
+        self.addon_dir = self.root_dir / "blender_addon"
+
+    def status(self, manifest: ReleaseManifest) -> dict[str, object]:
+        url = manifest.blender_addon_download_url
+        expected_path = self.expected_path(manifest) if url else None
+        return {
+            "available": bool(url),
+            "downloaded": bool(expected_path and expected_path.exists()),
+            "url": url,
+            "path": str(expected_path) if expected_path else None,
+            "folder": str(self.addon_dir),
+        }
+
+    def expected_path(self, manifest: ReleaseManifest) -> Path | None:
+        url = manifest.blender_addon_download_url
+        if not url:
+            return None
+        return self.addon_dir / _filename_from_url(url, fallback=f"sharp-lab-blender-addon-{_platform_slug()}.zip")
+
+    def download_from_manifest(
+        self,
+        manifest: ReleaseManifest,
+        progress_callback: ProgressCallback | None = None,
+    ) -> Path:
+        url = manifest.blender_addon_download_url
+        if not url:
+            raise RuntimeError("This build does not declare a Blender add-on download URL.")
+
+        self.addon_dir.mkdir(parents=True, exist_ok=True)
+        destination = self.expected_path(manifest)
+        if destination is None:
+            raise RuntimeError("Could not resolve a Blender add-on download path.")
+
+        partial = destination.with_suffix(destination.suffix + ".download")
+        partial.unlink(missing_ok=True)
+        download_to_path(url, partial, progress_callback=progress_callback)
+        partial.replace(destination)
+        return destination.resolve()
 
 
 class RuntimeInstallService:
@@ -379,6 +449,22 @@ def _parse_install_output_line(line: str) -> str | None:
         return cleaned[:160]
 
     return None
+
+
+def _platform_slug() -> str:
+    if os.name == "nt":
+        return "windows"
+    if os.name == "posix" and os.uname().sysname == "Darwin":
+        return "macos"
+    return "linux"
+
+
+def _filename_from_url(url: str, fallback: str) -> str:
+    parsed = urlparse(url)
+    name = unquote(Path(parsed.path).name)
+    if not name or name in {".", ".."}:
+        return fallback
+    return name
 
 
 def _safe_extract_zip(archive: zipfile.ZipFile, destination: Path) -> None:

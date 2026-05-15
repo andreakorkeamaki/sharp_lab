@@ -11,6 +11,7 @@ import webbrowser
 
 from sharp_lab.app import SharpLabApplication
 from sharp_lab.config import SharpLabConfig
+from sharp_lab.desktop import run_desktop_app
 from sharp_lab.logging_utils import setup_logging
 from sharp_lab.ui import serve as serve_web_ui
 
@@ -53,6 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
     studio_parser = subparsers.add_parser("studio", help="Start the local studio UI and open it in the browser.")
     studio_parser.add_argument("--host", help="Host to bind the web UI to.")
     studio_parser.add_argument("--port", type=int, help="Port to bind the web UI to.")
+
+    desktop_parser = subparsers.add_parser("desktop", help="Start Sharp Lab in a desktop app window.")
+    desktop_parser.add_argument("--host", help="Host to bind the local app server to.")
+    desktop_parser.add_argument("--port", type=int, help="Port to bind the local app server to.")
 
     subparsers.add_parser("config-path", help="Show the resolved config file path.")
     return parser
@@ -111,6 +116,12 @@ def main(argv: list[str] | None = None) -> int:
         serve_web_ui(app, host=host, port=port)
         return 0
 
+    if args.command == "desktop":
+        host = args.host or config.web.host
+        port = args.port or config.web.port
+        run_desktop_app(app, host=host, port=port)
+        return 0
+
     if args.command == "config-path":
         resolved = config.config_file or (Path.cwd() / "sharp_lab.toml")
         print(resolved)
@@ -133,7 +144,7 @@ def _resolve_argv(
         return resolved_runtime_argv
 
     if _should_default_to_studio(frozen=frozen):
-        return ["studio"]
+        return [_default_packaged_command()]
     return resolved_runtime_argv
 
 
@@ -144,6 +155,13 @@ def _should_default_to_studio(frozen: bool | None = None) -> bool:
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
     return frozen
+
+
+def _default_packaged_command() -> str:
+    default_command = os.environ.get("SHARP_LAB_DEFAULT_COMMAND", "").strip().lower()
+    if default_command in {"studio", "web", "desktop"}:
+        return default_command
+    return "desktop"
 
 
 if __name__ == "__main__":

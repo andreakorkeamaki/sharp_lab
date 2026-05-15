@@ -106,9 +106,12 @@ jobs:
           full_asset_name = f"sharp-lab-{platform_slug}-{ref_name}"
           lite_asset_name = f"sharp-lab-{platform_slug}-lite-{ref_name}"
           runtime_asset_name = f"sharp-lab-runtime-{platform_slug}-{ref_name}"
+          blender_addon_asset_name = f"sharp-lab-blender-addon-{platform_slug}-{ref_name}"
           runtime_download_url = None
+          blender_addon_download_url = None
           if ref_type == "tag":
               runtime_download_url = f"https://github.com/{repository}/releases/download/{ref_name}/{runtime_asset_name}.zip"
+              blender_addon_download_url = f"https://github.com/{repository}/releases/download/{ref_name}/{blender_addon_asset_name}.zip"
 
           def write_manifest(root: Path, build_flavor: str) -> None:
               runtime_install_mode = "archive"
@@ -129,6 +132,9 @@ jobs:
                   "sharp_repo_url": "https://github.com/apple/ml-sharp.git",
                   "sharp_repo_ref": "1eaa046834b81852261262b41b0919f5c1efdd2e",
                   "model_url": "https://ml-site.cdn-apple.com/models/sharp/sharp_2572gikvuh.pt",
+                  "blender_addon_url": blender_addon_download_url,
+                  "release_repository": repository,
+                  "release_version": ref_name,
                   "studio_path": "/studio",
                   "setup_path": "/setup",
               }

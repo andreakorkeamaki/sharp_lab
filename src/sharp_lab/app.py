@@ -7,7 +7,7 @@ from sharp_lab.discovery import ImageDiscoveryService
 from sharp_lab.downloads import DownloadTaskManager
 from sharp_lab.export import ExportManager
 from sharp_lab.pipeline import PreprocessingPipeline
-from sharp_lab.release import ReleaseManifest, RuntimeInstallService
+from sharp_lab.release import BlenderAddonDownloadService, ReleaseManifest, RuntimeInstallService
 from sharp_lab.sharp import SharpIntegrationService, SharpRunRecord
 
 
@@ -19,6 +19,7 @@ class SharpLabApplication:
         self.config.ensure_directories()
         self.release = ReleaseManifest.load(config.base_dir)
         self.runtime_installer = RuntimeInstallService(config.base_dir)
+        self.blender_addon_downloader = BlenderAddonDownloadService(config.base_dir)
         self.downloads = DownloadTaskManager()
         self.sharp_service = SharpIntegrationService(
             runs_dir=self.config.paths.runs,
@@ -62,6 +63,9 @@ class SharpLabApplication:
     def release_status(self) -> dict[str, object]:
         return self.release.to_dict()
 
+    def blender_addon_status(self) -> dict[str, object]:
+        return self.blender_addon_downloader.status(self.release)
+
     def install_runtime(self) -> Path:
         return self.runtime_installer.install_from_manifest(self.release)
 
@@ -82,6 +86,17 @@ class SharpLabApplication:
             "model",
             start_message="Starting model download.",
             worker=lambda reporter: self.sharp_service.download_default_checkpoint(progress_callback=reporter.download),
+        )
+        return task.to_dict()
+
+    def start_blender_addon_download(self) -> dict[str, object]:
+        task = self.downloads.start(
+            "blender-addon",
+            start_message="Starting Blender add-on download.",
+            worker=lambda reporter: self.blender_addon_downloader.download_from_manifest(
+                self.release,
+                progress_callback=reporter.download,
+            ),
         )
         return task.to_dict()
 

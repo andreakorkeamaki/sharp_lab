@@ -58,7 +58,7 @@ Unzip it and launch:
 - Windows: double-click `Sharp Lab.exe`
 - macOS: open `Sharp Lab`
 
-The full packaged app starts the local studio UI and opens it in your default browser automatically. The Lite build opens a setup-first page instead. On Windows, the Lite setup now bootstraps a local Python runtime and installs SHARP into the app folder on demand, instead of relying on a bundled virtual environment. Each release zip also includes `sharp_lab.example.json` so you can override paths without editing source code.
+The full packaged app starts the local studio UI in a desktop app window. If the native desktop webview is unavailable on a machine, it falls back to opening the same local UI in the default browser. The Lite build opens a setup-first page instead. On Windows, the Lite setup now bootstraps a local Python runtime and installs SHARP into the app folder on demand, instead of relying on a bundled virtual environment. Each release zip also includes `sharp_lab.example.json` so you can override paths without editing source code.
 
 The release workflow now builds a bundled `ml-sharp` runtime from the pinned Apple source revision. The full app zip includes it directly, while the Lite zip keeps the initial download smaller. On Windows, the Lite release bootstraps Python and SHARP locally on first setup; on other platforms, the Lite flow can still fetch a portable runtime archive. The model checkpoint itself is still optional, because the app can download it during onboarding.
 
@@ -74,7 +74,7 @@ runtime/
 
 When that folder exists, the release workflow bundles it into the downloadable zip and the app auto-detects it on launch. Otherwise the workflow creates the runtime bundle itself from `apple/ml-sharp`.
 
-If the SHARP executable is present but the checkpoint file is not bundled, the app now offers a first-run "Download Apple Model" action in the UI. In the Lite build, the setup page also offers an "Install Runtime" action before you enter the studio. On Windows, that action performs a full local bootstrap of Python and SHARP inside the app folder, then validates the install before unlocking the studio. You can also let the SHARP CLI download the checkpoint automatically on the first prediction run and cache it under `~/.cache/torch/hub/checkpoints/`.
+If the SHARP executable is present but the checkpoint file is not bundled, the app now offers a first-run "Download Apple Model" action in the UI. In the Lite build, the setup page also offers an "Install Runtime" action before you enter the studio. The same setup page can download the platform-specific Blender add-on zip into the app folder, so Blender can be installed from the file Sharp Lab already fetched. On Windows, the runtime install action performs a full local bootstrap of Python and SHARP inside the app folder, then validates the install before unlocking the studio. You can also let the SHARP CLI download the checkpoint automatically on the first prediction run and cache it under `~/.cache/torch/hub/checkpoints/`.
 
 The repo includes a release workflow at `.github/workflows/release.yml`. Pushing a tag like `v0.1.15` builds:
 
@@ -154,6 +154,7 @@ sharp-lab sharp predict --input /Users/andreakorkeamaki/Desktop/applesharp
 sharp-lab sharp runs
 sharp-lab web
 sharp-lab studio
+sharp-lab desktop
 ```
 
 What these do:
@@ -168,6 +169,8 @@ What these do:
   - Starts the local browser UI so you can run SHARP and inspect generated splats in one place.
 - `sharp-lab studio`
   - Starts the local browser UI and opens it automatically in your default browser.
+- `sharp-lab desktop`
+  - Starts the same local UI in a desktop app window when `pywebview` is installed, with browser fallback.
 
 ## Local web UI
 
@@ -186,6 +189,8 @@ http://127.0.0.1:4173
 The local UI can:
 
 - trigger SHARP against a local image or folder path
+- install the local runtime and download the Apple model from setup
+- download the platform-specific Blender add-on zip into the app folder
 - save each run under `workspace/runs/`
 - keep a `run.json` manifest and a `sharp.log` for each run
 - preview the generated `.ply` directly in the browser with Spark
