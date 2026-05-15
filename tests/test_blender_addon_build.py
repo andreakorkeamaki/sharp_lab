@@ -41,6 +41,19 @@ class BlenderAddonBuildTests(unittest.TestCase):
             self.assertTrue((destination / "run-sharp").exists())
             self.assertFalse((destination / "models" / "sharp.pt").exists())
 
+    def test_mac_builder_can_create_lightweight_addon_without_runtime_template(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "sharp-lab-blender-addon-macos.zip"
+
+            MAC_BUILDER.build(output_path=output_path, include_runtime_template=False)
+
+            with zipfile.ZipFile(output_path) as archive:
+                names = archive.namelist()
+
+            self.assertIn("sharp_lab_blender/__init__.py", names)
+            self.assertIn("sharp_lab/__init__.py", names)
+            self.assertFalse(any(name.startswith("sharp_lab_blender/runtime_template/") for name in names))
+
     def test_windows_builder_creates_portable_runtime_from_runtime_dir(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)

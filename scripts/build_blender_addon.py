@@ -28,6 +28,11 @@ def parse_args() -> argparse.Namespace:
         "--output",
         help=f"Output zip path. Defaults to {DIST_PATH}.",
     )
+    parser.add_argument(
+        "--no-runtime-template",
+        action="store_true",
+        help="Build a lightweight add-on that downloads/prepares the runtime during setup.",
+    )
     return parser.parse_args()
 
 
@@ -119,7 +124,12 @@ set "MPLCONFIGDIR=%RUNTIME_DIR%\\.cache\\matplotlib"
     _remove_bundled_models(destination)
 
 
-def build(*, runtime_dir: Path | None = None, output_path: Path = DIST_PATH) -> Path:
+def build(
+    *,
+    runtime_dir: Path | None = None,
+    output_path: Path = DIST_PATH,
+    include_runtime_template: bool = True,
+) -> Path:
     staging_root = BUILD_ROOT / ADDON_PACKAGE_NAME
     package_root = BUILD_ROOT / "sharp_lab"
     runtime_root = staging_root / "runtime_template"
@@ -127,10 +137,11 @@ def build(*, runtime_dir: Path | None = None, output_path: Path = DIST_PATH) -> 
     _reset_dir(BUILD_ROOT)
     shutil.copytree(ADDON_SOURCE_DIR, staging_root, ignore=IGNORE_PATTERNS)
     shutil.copytree(PACKAGE_SOURCE_DIR, package_root, ignore=IGNORE_PATTERNS)
-    if runtime_dir is not None:
-        _copy_runtime_from_directory(runtime_dir, runtime_root)
-    else:
-        _copy_runtime_from_local_template(runtime_root)
+    if include_runtime_template:
+        if runtime_dir is not None:
+            _copy_runtime_from_directory(runtime_dir, runtime_root)
+        else:
+            _copy_runtime_from_local_template(runtime_root)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
@@ -151,5 +162,9 @@ if __name__ == "__main__":
     args = parse_args()
     runtime_dir = Path(args.runtime_dir).expanduser().resolve() if args.runtime_dir else None
     output_path = Path(args.output).expanduser().resolve() if args.output else DIST_PATH
-    archive_path = build(runtime_dir=runtime_dir, output_path=output_path)
+    archive_path = build(
+        runtime_dir=runtime_dir,
+        output_path=output_path,
+        include_runtime_template=not args.no_runtime_template,
+    )
     print(f"Built Blender add-on: {archive_path}")

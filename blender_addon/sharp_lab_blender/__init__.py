@@ -35,7 +35,7 @@ from sharp_lab.sharp.integration import DEFAULT_MODEL_FILENAME, SharpIntegration
 bl_info = {
     "name": "Sharp Lab",
     "author": "Andrea Korkeamaki",
-    "version": (0, 1, 13),
+    "version": (0, 1, 14),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Sharp Lab",
     "description": "Run Apple SHARP from Blender and import the generated PLY into the scene.",

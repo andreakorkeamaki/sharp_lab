@@ -235,7 +235,7 @@ class BlenderAddonRuntimeTests(unittest.TestCase):
                 downloaded_urls,
                 [
                     "https://github.com/andreakorkeamaki/sharp_lab/releases/download/"
-                    "v0.1.13/sharp-lab-blender-addon-windows-v0.1.13.zip"
+                    "v0.1.14/sharp-lab-blender-addon-windows-v0.1.14.zip"
                 ],
             )
 
