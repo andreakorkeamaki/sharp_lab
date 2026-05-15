@@ -35,7 +35,7 @@ from sharp_lab.sharp.integration import DEFAULT_MODEL_FILENAME, SharpIntegration
 bl_info = {
     "name": "Sharp Lab",
     "author": "Andrea Korkeamaki",
-    "version": (0, 1, 14),
+    "version": (0, 1, 15),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Sharp Lab",
     "description": "Run Apple SHARP from Blender and import the generated PLY into the scene.",
@@ -52,6 +52,8 @@ _MODEL_DOWNLOAD_STATE = {
     "percent": 0.0,
     "error": "",
     "result_path": "",
+    "runtime_path": "",
+    "executable_path": "",
 }
 
 _RELEASE_REPOSITORY = "andreakorkeamaki/sharp_lab"
@@ -107,6 +109,8 @@ def _reset_model_download_state() -> None:
         percent=0.0,
         error="",
         result_path="",
+        runtime_path="",
+        executable_path="",
     )
 
 
@@ -277,6 +281,27 @@ def _repair_posix_runtime_permissions(runtime_dir: Path) -> None:
                 path.chmod(0o755)
 
 
+def _install_or_copy_runtime_template(
+    runtime_dir: Path,
+    progress_callback: ProgressCallback | None = None,
+) -> Path:
+    workspace_root = runtime_dir.parent
+    staging_dir = workspace_root / "runtime.installing"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir, ignore_errors=True)
+
+    if _bundled_runtime_available():
+        shutil.copytree(_BUNDLED_RUNTIME_DIR, staging_dir)
+        if runtime_dir.exists():
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+        staging_dir.replace(runtime_dir)
+        _repair_posix_runtime_permissions(runtime_dir)
+        return runtime_dir.resolve()
+
+    return _install_runtime_from_release_archive(runtime_dir, progress_callback=progress_callback)
+
+
 def _ensure_workspace_runtime(
     context: bpy.types.Context,
     progress_callback: ProgressCallback | None = None,
@@ -303,18 +328,7 @@ def _ensure_workspace_runtime(
             prefs.checkpoint_path = str(checkpoint_path)
         return runtime_dir
 
-    workspace_root.mkdir(parents=True, exist_ok=True)
-    staging_dir = workspace_root / "runtime.installing"
-    if staging_dir.exists():
-        shutil.rmtree(staging_dir, ignore_errors=True)
-    if _bundled_runtime_available():
-        shutil.copytree(_BUNDLED_RUNTIME_DIR, staging_dir)
-        if runtime_dir.exists():
-            shutil.rmtree(runtime_dir, ignore_errors=True)
-        staging_dir.replace(runtime_dir)
-        _repair_posix_runtime_permissions(runtime_dir)
-    else:
-        runtime_dir = _install_runtime_from_release_archive(runtime_dir, progress_callback=progress_callback)
+    runtime_dir = _install_or_copy_runtime_template(runtime_dir, progress_callback=progress_callback)
 
     runtime_executable = _runtime_executable_path(runtime_dir)
     prefs.executable_path = str(runtime_executable)
@@ -615,6 +629,8 @@ class SHARPLAB_OT_download_model(Operator):
         message = str(state["message"])
         props.model_download_detail = detail
         props.status_message = message or props.status_message
+        if state["executable_path"]:
+            prefs.executable_path = str(state["executable_path"])
         if state["result_path"]:
             prefs.checkpoint_path = str(state["result_path"])
             _set_setup_completed(prefs, True)
@@ -661,47 +677,83 @@ class SHARPLAB_OT_download_model(Operator):
             self.report({"INFO"}, "The Apple SHARP model download is already running.")
             return {"CANCELLED"}
 
-        try:
-            runtime_dir = _ensure_workspace_runtime(context)
-            executable = _configured_runtime_path(prefs)
-            prefs.executable_path = str(executable)
-            checkpoint = _configured_checkpoint_path(prefs)
+        workspace_root = _workspace_root(prefs.workspace_path)
+        runtime_dir = _runtime_root(workspace_root)
+        configured_executable = Path(prefs.executable_path).expanduser() if prefs.executable_path.strip() else None
+        configured_checkpoint = Path(prefs.checkpoint_path).expanduser() if prefs.checkpoint_path.strip() else None
+        default_device = prefs.default_device
+
+        if configured_executable and configured_executable.exists():
+            runtime_dir = configured_executable.parent.resolve()
+            checkpoint = configured_checkpoint or _runtime_checkpoint_path(runtime_dir)
             if checkpoint.exists():
+                prefs.executable_path = str(configured_executable.resolve())
                 prefs.checkpoint_path = str(checkpoint.resolve())
                 _set_setup_completed(prefs, True)
                 props.status_message = "Apple SHARP model is ready."
-                self.report({"INFO"}, "Apple SHARP model is already downloaded.")
+                self.report({"INFO"}, "Sharp Lab is already set up.")
                 return {"FINISHED"}
-        except Exception as exc:
-            props.status_message = str(exc)
-            for line in _report_lines(str(exc))[:3]:
-                self.report({"ERROR"}, line)
-            return {"CANCELLED"}
+
+        workspace_runtime_executable = _runtime_executable_path(runtime_dir)
+        if workspace_runtime_executable.exists() and _runtime_is_portable(runtime_dir):
+            checkpoint = configured_checkpoint or _runtime_checkpoint_path(runtime_dir)
+            if checkpoint.exists():
+                prefs.executable_path = str(workspace_runtime_executable.resolve())
+                prefs.checkpoint_path = str(checkpoint.resolve())
+                _set_setup_completed(prefs, True)
+                props.status_message = "Apple SHARP model is ready."
+                self.report({"INFO"}, "Sharp Lab is already set up.")
+                return {"FINISHED"}
 
         _reset_model_download_state()
         props.model_download_active = True
         props.model_download_percent = 0.0
         props.model_download_detail = ""
-        props.status_message = "Starting Apple SHARP model download..."
+        props.status_message = "Starting Sharp Lab setup..."
 
-        service = _build_download_service(executable, checkpoint, prefs.default_device)
-
-        def progress_callback(downloaded: int, total: int | None) -> None:
+        def runtime_progress_callback(downloaded: int, total: int | None) -> None:
             percent = round(downloaded / total * 100, 1) if total else 0.0
-            if total:
-                message = f"Downloading Apple SHARP model... {percent:.1f}%"
-            else:
-                message = "Downloading Apple SHARP model..."
             _set_model_download_state(
                 downloaded=downloaded,
                 total=total,
                 percent=percent,
-                message=message,
+                message=f"Downloading SHARP runtime... {percent:.1f}%" if total else "Downloading SHARP runtime...",
+            )
+
+        def model_progress_callback(downloaded: int, total: int | None) -> None:
+            percent = round(downloaded / total * 100, 1) if total else 0.0
+            _set_model_download_state(
+                downloaded=downloaded,
+                total=total,
+                percent=percent,
+                message=f"Downloading Apple SHARP model... {percent:.1f}%" if total else "Downloading Apple SHARP model...",
             )
 
         def worker() -> None:
             try:
-                checkpoint_path = service.download_default_checkpoint(progress_callback=progress_callback)
+                executable = configured_executable
+                prepared_runtime_dir = runtime_dir
+                if executable is None or not executable.exists():
+                    _set_model_download_state(message="Preparing SHARP runtime...", percent=0.0)
+                    prepared_runtime_dir = _install_or_copy_runtime_template(runtime_dir, runtime_progress_callback)
+                    executable = _runtime_executable_path(prepared_runtime_dir)
+
+                checkpoint = configured_checkpoint or _runtime_checkpoint_path(prepared_runtime_dir)
+                if checkpoint.exists():
+                    _set_model_download_state(
+                        active=False,
+                        error="",
+                        result_path=str(checkpoint.resolve()),
+                        executable_path=str(executable.resolve()),
+                        runtime_path=str(prepared_runtime_dir.resolve()),
+                        percent=100.0,
+                        message="Sharp Lab setup completed.",
+                    )
+                    return
+
+                checkpoint.parent.mkdir(parents=True, exist_ok=True)
+                service = _build_download_service(executable, checkpoint, default_device)
+                checkpoint_path = service.download_default_checkpoint(progress_callback=model_progress_callback)
             except Exception as exc:
                 _set_model_download_state(active=False, error=str(exc), message=str(exc))
                 return
@@ -709,11 +761,13 @@ class SHARPLAB_OT_download_model(Operator):
                 active=False,
                 error="",
                 result_path=str(checkpoint_path),
+                executable_path=str(executable.resolve()),
+                runtime_path=str(prepared_runtime_dir.resolve()),
                 percent=100.0,
-                message=f"Model downloaded to {checkpoint_path}",
+                message="Sharp Lab setup completed.",
             )
 
-        _set_model_download_state(active=True, message="Starting Apple SHARP model download...")
+        _set_model_download_state(active=True, message="Starting Sharp Lab setup...")
         threading.Thread(target=worker, daemon=True).start()
         wm = context.window_manager
         wm.progress_begin(0, 100)
