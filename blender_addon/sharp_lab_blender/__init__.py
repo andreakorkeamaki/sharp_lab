@@ -5,8 +5,10 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 import threading
 from typing import Iterable
+import zipfile
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty, StringProperty
@@ -26,13 +28,14 @@ if _VENDOR_DIR.exists():
     if vendor_path not in sys.path:
         sys.path.insert(0, vendor_path)
 
+from sharp_lab.downloads import ProgressCallback, download_to_path  # noqa: E402
 from sharp_lab.sharp.integration import DEFAULT_MODEL_FILENAME, SharpIntegrationService  # noqa: E402
 
 
 bl_info = {
     "name": "Sharp Lab",
     "author": "Andrea Korkeamaki",
-    "version": (0, 1, 11),
+    "version": (0, 1, 12),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Sharp Lab",
     "description": "Run Apple SHARP from Blender and import the generated PLY into the scene.",
@@ -50,6 +53,8 @@ _MODEL_DOWNLOAD_STATE = {
     "error": "",
     "result_path": "",
 }
+
+_RELEASE_REPOSITORY = "andreakorkeamaki/sharp_lab"
 
 
 def _addon_name() -> str:
@@ -166,6 +171,70 @@ def _bundled_runtime_available() -> bool:
     return any(candidate.exists() for candidate in _runtime_executable_candidates(_BUNDLED_RUNTIME_DIR))
 
 
+def _addon_version_tag() -> str:
+    return "v" + ".".join(str(part) for part in bl_info["version"])
+
+
+def _runtime_platform_slug() -> str:
+    return "windows" if os.name == "nt" else "macos"
+
+
+def _release_runtime_archive_url() -> str:
+    tag = _addon_version_tag()
+    platform_slug = _runtime_platform_slug()
+    filename = f"sharp-lab-runtime-{platform_slug}-{tag}.zip"
+    return f"https://github.com/{_RELEASE_REPOSITORY}/releases/download/{tag}/{filename}"
+
+
+def _safe_extract_zip(archive_path: Path, destination: Path) -> None:
+    with zipfile.ZipFile(archive_path) as archive:
+        destination = destination.resolve()
+        for member in archive.infolist():
+            target = (destination / member.filename).resolve()
+            if target != destination and destination not in target.parents:
+                raise RuntimeError(f"Unsafe runtime archive member path: {member.filename}")
+        archive.extractall(destination)
+
+
+def _find_runtime_dir(extract_dir: Path) -> Path:
+    direct = extract_dir / "runtime"
+    if direct.is_dir():
+        return direct
+
+    candidates = [path for path in extract_dir.rglob("runtime") if path.is_dir()]
+    if not candidates:
+        raise RuntimeError("The downloaded SHARP runtime archive did not contain a runtime folder.")
+    return sorted(candidates, key=lambda path: len(path.parts))[0]
+
+
+def _install_runtime_from_release_archive(
+    runtime_dir: Path,
+    progress_callback: ProgressCallback | None = None,
+) -> Path:
+    workspace_root = runtime_dir.parent
+    staging_dir = workspace_root / "runtime.installing"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir, ignore_errors=True)
+
+    with tempfile.TemporaryDirectory(dir=workspace_root) as temp_dir_name:
+        temp_dir = Path(temp_dir_name)
+        archive_path = temp_dir / "runtime.zip"
+        extract_dir = temp_dir / "extract"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+
+        download_to_path(_release_runtime_archive_url(), archive_path, progress_callback=progress_callback)
+        _safe_extract_zip(archive_path, extract_dir)
+        runtime_source = _find_runtime_dir(extract_dir)
+        shutil.copytree(runtime_source, staging_dir)
+
+    if runtime_dir.exists():
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+    staging_dir.replace(runtime_dir)
+    _repair_posix_runtime_permissions(runtime_dir)
+    return runtime_dir.resolve()
+
+
 def _runtime_is_portable(runtime_dir: Path) -> bool:
     if os.name == "nt":
         launcher = runtime_dir / "run-sharp.cmd"
@@ -198,7 +267,10 @@ def _repair_posix_runtime_permissions(runtime_dir: Path) -> None:
                 path.chmod(0o755)
 
 
-def _ensure_workspace_runtime(context: bpy.types.Context) -> Path:
+def _ensure_workspace_runtime(
+    context: bpy.types.Context,
+    progress_callback: ProgressCallback | None = None,
+) -> Path:
     prefs = _addon_prefs(context)
     configured_executable = Path(prefs.executable_path).expanduser() if prefs.executable_path.strip() else None
     if configured_executable is not None and configured_executable.exists():
@@ -221,18 +293,18 @@ def _ensure_workspace_runtime(context: bpy.types.Context) -> Path:
             prefs.checkpoint_path = str(checkpoint_path)
         return runtime_dir
 
-    if not _bundled_runtime_available():
-        raise RuntimeError("This add-on package does not include a bundled SHARP runtime.")
-
     workspace_root.mkdir(parents=True, exist_ok=True)
     staging_dir = workspace_root / "runtime.installing"
     if staging_dir.exists():
         shutil.rmtree(staging_dir, ignore_errors=True)
-    shutil.copytree(_BUNDLED_RUNTIME_DIR, staging_dir)
-    if runtime_dir.exists():
-        shutil.rmtree(runtime_dir, ignore_errors=True)
-    staging_dir.replace(runtime_dir)
-    _repair_posix_runtime_permissions(runtime_dir)
+    if _bundled_runtime_available():
+        shutil.copytree(_BUNDLED_RUNTIME_DIR, staging_dir)
+        if runtime_dir.exists():
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+        staging_dir.replace(runtime_dir)
+        _repair_posix_runtime_permissions(runtime_dir)
+    else:
+        runtime_dir = _install_runtime_from_release_archive(runtime_dir, progress_callback=progress_callback)
 
     runtime_executable = _runtime_executable_path(runtime_dir)
     prefs.executable_path = str(runtime_executable)
@@ -275,7 +347,7 @@ def _ensure_model_checkpoint(
     progress_callback=None,
 ) -> Path:
     prefs = _addon_prefs(context)
-    runtime_dir = _ensure_workspace_runtime(context)
+    runtime_dir = _ensure_workspace_runtime(context, progress_callback=progress_callback)
     checkpoint = _configured_checkpoint_path(prefs)
     if checkpoint.exists():
         prefs.checkpoint_path = str(checkpoint.resolve())

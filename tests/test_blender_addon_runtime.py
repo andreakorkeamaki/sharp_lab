@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -199,6 +200,44 @@ class BlenderAddonRuntimeTests(unittest.TestCase):
             self.assertEqual(resolved_runtime, runtime_dir.resolve())
             self.assertEqual(Path(prefs.executable_path), launcher.resolve())
             self.assertEqual(Path(prefs.checkpoint_path), checkpoint.resolve())
+
+    def test_missing_bundled_runtime_downloads_release_runtime_archive(self) -> None:
+        addon = _load_addon_module()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            runtime_archive = temp_root / "runtime.zip"
+            with zipfile.ZipFile(runtime_archive, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr(
+                    "runtime/run-sharp.cmd",
+                    '"%PYTHON_DIR%\\tools\\python.exe" "%RUNTIME_DIR%\\sharp_bootstrap.py" %*\n',
+                )
+                archive.writestr("runtime/python/tools/python.exe", "")
+
+            context, prefs, _props = _make_context(addon, temp_root / "workspace")
+            missing_template = temp_root / "missing-runtime-template"
+            downloaded_urls = []
+
+            def fake_download(url, destination, progress_callback=None):
+                downloaded_urls.append(url)
+                destination.write_bytes(runtime_archive.read_bytes())
+                if progress_callback is not None:
+                    progress_callback(destination.stat().st_size, destination.stat().st_size)
+
+            with mock.patch.object(addon, "os", SimpleNamespace(name="nt")):
+                with mock.patch.object(addon, "download_to_path", side_effect=fake_download):
+                    addon._BUNDLED_RUNTIME_DIR = missing_template
+                    runtime_dir = addon._ensure_workspace_runtime(context)
+
+            self.assertEqual(runtime_dir, (temp_root / "workspace" / "runtime").resolve())
+            self.assertTrue((runtime_dir / "run-sharp.cmd").exists())
+            self.assertEqual(Path(prefs.executable_path), runtime_dir / "run-sharp.cmd")
+            self.assertEqual(
+                downloaded_urls,
+                [
+                    "https://github.com/andreakorkeamaki/sharp_lab/releases/download/"
+                    "v0.1.12/sharp-lab-runtime-windows-v0.1.12.zip"
+                ],
+            )
 
 
 if __name__ == "__main__":
