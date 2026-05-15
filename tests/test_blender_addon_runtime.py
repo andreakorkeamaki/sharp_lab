@@ -201,17 +201,17 @@ class BlenderAddonRuntimeTests(unittest.TestCase):
             self.assertEqual(Path(prefs.executable_path), launcher.resolve())
             self.assertEqual(Path(prefs.checkpoint_path), checkpoint.resolve())
 
-    def test_missing_bundled_runtime_downloads_release_runtime_archive(self) -> None:
+    def test_missing_bundled_runtime_downloads_windows_addon_runtime_template(self) -> None:
         addon = _load_addon_module()
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
             runtime_archive = temp_root / "runtime.zip"
             with zipfile.ZipFile(runtime_archive, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr(
-                    "runtime/run-sharp.cmd",
+                    "sharp_lab_blender/runtime_template/run-sharp.cmd",
                     '"%PYTHON_DIR%\\tools\\python.exe" "%RUNTIME_DIR%\\sharp_bootstrap.py" %*\n',
                 )
-                archive.writestr("runtime/python/tools/python.exe", "")
+                archive.writestr("sharp_lab_blender/runtime_template/python/tools/python.exe", "")
 
             context, prefs, _props = _make_context(addon, temp_root / "workspace")
             missing_template = temp_root / "missing-runtime-template"
@@ -235,7 +235,7 @@ class BlenderAddonRuntimeTests(unittest.TestCase):
                 downloaded_urls,
                 [
                     "https://github.com/andreakorkeamaki/sharp_lab/releases/download/"
-                    "v0.1.12/sharp-lab-runtime-windows-v0.1.12.zip"
+                    "v0.1.13/sharp-lab-blender-addon-windows-v0.1.13.zip"
                 ],
             )
 

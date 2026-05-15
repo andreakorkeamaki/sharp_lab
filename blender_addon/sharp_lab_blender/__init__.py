@@ -35,7 +35,7 @@ from sharp_lab.sharp.integration import DEFAULT_MODEL_FILENAME, SharpIntegration
 bl_info = {
     "name": "Sharp Lab",
     "author": "Andrea Korkeamaki",
-    "version": (0, 1, 12),
+    "version": (0, 1, 13),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Sharp Lab",
     "description": "Run Apple SHARP from Blender and import the generated PLY into the scene.",
@@ -182,6 +182,9 @@ def _runtime_platform_slug() -> str:
 def _release_runtime_archive_url() -> str:
     tag = _addon_version_tag()
     platform_slug = _runtime_platform_slug()
+    if platform_slug == "windows":
+        filename = f"sharp-lab-blender-addon-windows-{tag}.zip"
+        return f"https://github.com/{_RELEASE_REPOSITORY}/releases/download/{tag}/{filename}"
     filename = f"sharp-lab-runtime-{platform_slug}-{tag}.zip"
     return f"https://github.com/{_RELEASE_REPOSITORY}/releases/download/{tag}/{filename}"
 
@@ -200,8 +203,15 @@ def _find_runtime_dir(extract_dir: Path) -> Path:
     direct = extract_dir / "runtime"
     if direct.is_dir():
         return direct
+    addon_template = extract_dir / "sharp_lab_blender" / "runtime_template"
+    if addon_template.is_dir():
+        return addon_template
 
-    candidates = [path for path in extract_dir.rglob("runtime") if path.is_dir()]
+    candidates = [
+        path
+        for path in extract_dir.rglob("*")
+        if path.is_dir() and path.name in {"runtime", "runtime_template"}
+    ]
     if not candidates:
         raise RuntimeError("The downloaded SHARP runtime archive did not contain a runtime folder.")
     return sorted(candidates, key=lambda path: len(path.parts))[0]
