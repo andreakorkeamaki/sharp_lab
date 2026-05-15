@@ -32,10 +32,9 @@ Install it in Blender with:
 After enabling:
 
 1. Open the `Sharp Lab` tab in the 3D View sidebar.
-2. Open the add-on preferences and set the workspace directory if you do not want the default.
-3. The add-on ships with a bundled SHARP runtime template and prepares it inside the workspace automatically.
-4. Click `Download Model` once to fetch the Apple SHARP checkpoint into that runtime.
-5. Choose an image or folder in the panel and run SHARP.
-6. The generated `.ply` is imported into the current Blender scene.
+2. Choose an image or folder in the panel and run SHARP.
+3. The add-on prepares the bundled SHARP runtime inside the workspace automatically.
+4. If the Apple SHARP checkpoint is not present yet, the first run downloads it into that runtime automatically.
+5. The generated `.ply` is imported into the current Blender scene.
 
-You do not need to point Blender manually at `run-sharp` when using the bundled build. The add-on copies the bundled runtime into the workspace automatically and fills the executable path there.
+You do not need to point Blender manually at `run-sharp` when using the bundled build. The add-on copies the bundled runtime into the workspace automatically and fills the executable and checkpoint paths there. The `Download Model` button is still available if you want to prepare the checkpoint before the first run.

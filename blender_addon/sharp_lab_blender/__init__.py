@@ -32,7 +32,7 @@ from sharp_lab.sharp.integration import DEFAULT_MODEL_FILENAME, SharpIntegration
 bl_info = {
     "name": "Sharp Lab",
     "author": "Andrea Korkeamaki",
-    "version": (0, 1, 9),
+    "version": (0, 1, 10),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Sharp Lab",
     "description": "Run Apple SHARP from Blender and import the generated PLY into the scene.",
@@ -129,6 +129,37 @@ def _runtime_checkpoint_path(runtime_dir: Path) -> Path:
     return runtime_dir / "models" / DEFAULT_MODEL_FILENAME
 
 
+def _configured_runtime_path(prefs: "SharpLabAddonPreferences") -> Path:
+    if prefs.executable_path.strip():
+        return Path(prefs.executable_path).expanduser()
+    return _runtime_executable_path(_runtime_root(_workspace_root(prefs.workspace_path)))
+
+
+def _configured_checkpoint_path(prefs: "SharpLabAddonPreferences") -> Path:
+    if prefs.checkpoint_path.strip():
+        return Path(prefs.checkpoint_path).expanduser()
+    return _runtime_checkpoint_path(_runtime_root(_workspace_root(prefs.workspace_path)))
+
+
+def _setup_status(prefs: "SharpLabAddonPreferences") -> dict[str, object]:
+    runtime_path = _configured_runtime_path(prefs)
+    checkpoint_path = _configured_checkpoint_path(prefs)
+    runtime_ready = runtime_path.exists()
+    checkpoint_ready = checkpoint_path.exists()
+    return {
+        "runtime_path": runtime_path,
+        "checkpoint_path": checkpoint_path,
+        "bundled_runtime": _bundled_runtime_available(),
+        "runtime_ready": runtime_ready,
+        "checkpoint_ready": checkpoint_ready,
+        "setup_complete": runtime_ready and checkpoint_ready,
+    }
+
+
+def _set_setup_completed(prefs: "SharpLabAddonPreferences", completed: bool) -> None:
+    prefs.setup_completed = completed
+
+
 def _bundled_runtime_available() -> bool:
     return any(candidate.exists() for candidate in _runtime_executable_candidates(_BUNDLED_RUNTIME_DIR))
 
@@ -191,6 +222,7 @@ def _ensure_workspace_runtime(context: bpy.types.Context) -> Path:
     staging_dir.replace(runtime_dir)
     _repair_posix_runtime_permissions(runtime_dir)
 
+    runtime_executable = _runtime_executable_path(runtime_dir)
     prefs.executable_path = str(runtime_executable)
     checkpoint_path = _runtime_checkpoint_path(runtime_dir)
     if checkpoint_path.exists():
@@ -224,6 +256,28 @@ def _build_download_service(executable: Path, checkpoint: Path | None, default_d
         checkpoint=checkpoint,
         default_device=default_device,
     )
+
+
+def _ensure_model_checkpoint(
+    context: bpy.types.Context,
+    progress_callback=None,
+) -> Path:
+    prefs = _addon_prefs(context)
+    runtime_dir = _ensure_workspace_runtime(context)
+    checkpoint = _configured_checkpoint_path(prefs)
+    if checkpoint.exists():
+        prefs.checkpoint_path = str(checkpoint.resolve())
+        _set_setup_completed(prefs, True)
+        return checkpoint.resolve()
+
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    prefs.checkpoint_path = str(checkpoint)
+    executable = _runtime_executable_path(runtime_dir)
+    service = _build_download_service(executable, checkpoint, prefs.default_device)
+    downloaded = service.download_default_checkpoint(progress_callback=progress_callback)
+    prefs.checkpoint_path = str(downloaded)
+    _set_setup_completed(prefs, True)
+    return downloaded
 
 
 def _import_ply(filepath: Path) -> None:
@@ -278,9 +332,15 @@ class SharpLabAddonPreferences(AddonPreferences):
         ),
         default="cpu",
     )
+    setup_completed: BoolProperty(
+        name="Setup Completed",
+        description="Whether the bundled runtime and model checkpoint have been prepared",
+        default=False,
+    )
 
     def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
+        layout.label(text="Bundled builds fill these paths automatically on first run.", icon="INFO")
         layout.use_property_split = True
         layout.prop(self, "executable_path")
         layout.prop(self, "checkpoint_path")
@@ -378,12 +438,37 @@ class SHARPLAB_OT_run(Operator):
             self.report({"ERROR"}, f"Input path does not exist: {input_path}")
             return {"CANCELLED"}
 
+        progress_started = False
         try:
-            executable = Path(prefs.executable_path).expanduser() if prefs.executable_path.strip() else None
-            if executable is None or not executable.exists():
-                runtime_dir = _ensure_workspace_runtime(context)
-                executable = _runtime_executable_path(runtime_dir)
+            runtime_dir = _ensure_workspace_runtime(context)
+            executable = _runtime_executable_path(runtime_dir)
             prefs.executable_path = str(executable)
+            checkpoint = _configured_checkpoint_path(prefs)
+            if not checkpoint.exists():
+                props.status_message = "Downloading Apple SHARP model before the first run..."
+                self.report({"INFO"}, "Downloading Apple SHARP model before the first run.")
+                context.window_manager.progress_begin(0, 100)
+                progress_started = True
+
+                def progress_callback(downloaded: int, total: int | None) -> None:
+                    percent = round(downloaded / total * 100, 1) if total else 0.0
+                    props.model_download_active = True
+                    props.model_download_percent = percent
+                    props.model_download_detail = (
+                        f"{downloaded:,} / {total:,} bytes" if total else f"{downloaded:,} bytes"
+                    )
+                    context.window_manager.progress_update(int(percent))
+
+                checkpoint = _ensure_model_checkpoint(context, progress_callback=progress_callback)
+                props.model_download_active = False
+                props.model_download_percent = 100.0
+                props.model_download_detail = ""
+                props.status_message = f"Apple SHARP model ready at {checkpoint}."
+            else:
+                prefs.checkpoint_path = str(checkpoint.resolve())
+                _set_setup_completed(prefs, True)
+
+            props.status_message = "Running SHARP..."
             result = _run_sharp(context, input_path)
             props.last_run_id = result.run_id
             props.last_ply_path = str(result.ply_path)
@@ -395,6 +480,10 @@ class SHARPLAB_OT_run(Operator):
             for line in _report_lines(str(exc))[:3]:
                 self.report({"ERROR"}, line)
             return {"CANCELLED"}
+        finally:
+            if progress_started:
+                context.window_manager.progress_end()
+                props.model_download_active = False
 
         self.report({"INFO"}, f"SHARP run {result.run_id} completed.")
         return {"FINISHED"}
@@ -434,6 +523,7 @@ class SHARPLAB_OT_download_model(Operator):
         props.status_message = message or props.status_message
         if state["result_path"]:
             prefs.checkpoint_path = str(state["result_path"])
+            _set_setup_completed(prefs, True)
         return state
 
     def _finish(self, context: bpy.types.Context) -> set[str]:
@@ -470,6 +560,8 @@ class SHARPLAB_OT_download_model(Operator):
         return {"RUNNING_MODAL"}
 
     def execute(self, context: bpy.types.Context) -> set[str]:
+        props = context.scene.sharp_lab
+        prefs = _addon_prefs(context)
         state = _get_model_download_state()
         if state["active"]:
             self.report({"INFO"}, "The Apple SHARP model download is already running.")
@@ -479,7 +571,13 @@ class SHARPLAB_OT_download_model(Operator):
             runtime_dir = _ensure_workspace_runtime(context)
             executable = _runtime_executable_path(runtime_dir)
             prefs.executable_path = str(executable)
-            checkpoint = Path(prefs.checkpoint_path).expanduser() if prefs.checkpoint_path.strip() else None
+            checkpoint = _configured_checkpoint_path(prefs)
+            if checkpoint.exists():
+                prefs.checkpoint_path = str(checkpoint.resolve())
+                _set_setup_completed(prefs, True)
+                props.status_message = "Apple SHARP model is ready."
+                self.report({"INFO"}, "Apple SHARP model is already downloaded.")
+                return {"FINISHED"}
         except Exception as exc:
             props.status_message = str(exc)
             for line in _report_lines(str(exc))[:3]:
@@ -578,6 +676,46 @@ class SHARPLAB_PT_panel(Panel):
         layout = self.layout
         props = context.scene.sharp_lab
         prefs = _addon_prefs(context)
+        setup = _setup_status(prefs)
+        configured_runtime = setup["runtime_path"]
+        configured_checkpoint = setup["checkpoint_path"]
+        bundled_runtime = bool(setup["bundled_runtime"])
+        runtime_ready = bool(setup["runtime_ready"])
+        checkpoint_ready = bool(setup["checkpoint_ready"])
+
+        if not setup["setup_complete"]:
+            setup_box = layout.box()
+            setup_box.label(text="Sharp Lab Setup", icon="PREFERENCES")
+            setup_box.label(text="Prepare the local runtime and Apple SHARP model once.")
+            setup_box.label(text=f"Bundled Runtime: {'included' if bundled_runtime else 'missing'}")
+            if runtime_ready:
+                setup_box.label(text=f"Runtime: ready ({configured_runtime.name})")
+            elif bundled_runtime:
+                setup_box.label(text="Runtime: will be copied to your workspace")
+            else:
+                setup_box.label(text="Runtime: missing from this add-on package")
+            setup_box.label(text=f"Model: {'ready' if checkpoint_ready else 'will be downloaded'}")
+            setup_box.label(text=f"Workspace: {_workspace_root(prefs.workspace_path)}")
+            setup_box.operator(
+                "sharplab.download_model",
+                icon="IMPORT",
+                text="Set Up Sharp Lab" if not props.model_download_active else "Setting Up...",
+            )
+            setup_box.operator("sharplab.open_preferences", text="Advanced Settings", icon="PREFERENCES")
+
+            if props.model_download_active or props.model_download_percent > 0:
+                progress_box = layout.box()
+                progress_box.label(text="Setup Progress")
+                progress_box.prop(props, "model_download_percent", text="")
+                if props.model_download_detail:
+                    progress_box.label(text=props.model_download_detail)
+
+            if props.status_message:
+                info_box = layout.box()
+                info_box.label(text="Status")
+                for line in _report_lines(props.status_message)[:3]:
+                    info_box.label(text=line)
+            return
 
         col = layout.column(align=True)
         col.prop(props, "input_path")
@@ -591,9 +729,14 @@ class SHARPLAB_PT_panel(Panel):
 
         status_box = layout.box()
         status_box.label(text="Configuration")
-        status_box.label(text=f"Bundled Runtime: {'yes' if _bundled_runtime_available() else 'missing'}")
-        status_box.label(text=f"Executable: {'set' if prefs.executable_path.strip() else 'auto'}")
-        status_box.label(text=f"Checkpoint: {'set' if prefs.checkpoint_path.strip() else 'missing'}")
+        status_box.label(text=f"Bundled Runtime: {'included' if bundled_runtime else 'missing'}")
+        if runtime_ready:
+            status_box.label(text=f"Runtime: ready ({configured_runtime.name})")
+        elif bundled_runtime:
+            status_box.label(text="Runtime: will prepare automatically")
+        else:
+            status_box.label(text="Runtime: missing")
+        status_box.label(text=f"Model: {'ready' if checkpoint_ready else 'will download on run'}")
         status_box.label(text=f"Workspace: {_workspace_root(prefs.workspace_path)}")
         status_box.operator(
             "sharplab.download_model",

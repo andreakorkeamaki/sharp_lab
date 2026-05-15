@@ -111,27 +111,36 @@ function applyStatus(payload) {
   currentConfig = payload;
   const { sharp, release } = payload;
   const isComplete = sharp.runtime_ready && sharp.checkpoint_exists;
+  const canInstallRuntime = Boolean(release.can_download_runtime);
 
   workspacePath.textContent = payload.workspace;
   setupShell?.classList.toggle("is-complete", isComplete);
   wizardPanel?.classList.toggle("is-complete", isComplete);
-  heroHint.textContent = release.runtime_install_mode === "windows-local"
-    ? "This build installs Python and SHARP locally inside the app folder, then unlocks the studio."
-    : "This build installs only the runtime and model pieces needed on this machine.";
+  heroHint.textContent = !canInstallRuntime
+    ? "This build expects an existing local SHARP runtime or a manually bundled runtime folder."
+    : release.runtime_install_mode === "windows-local"
+      ? "This build installs Python and SHARP locally inside the app folder, then unlocks the studio."
+      : "This build installs only the runtime and model pieces needed on this machine.";
 
-  installRuntimeButton.textContent = sharp.runtime_ready ? "Runtime Installed" : "Install Runtime";
+  installRuntimeButton.textContent = sharp.runtime_ready
+    ? "Runtime Installed"
+    : canInstallRuntime
+      ? "Install Runtime"
+      : "Runtime Not Bundled";
   downloadModelButton.textContent = sharp.checkpoint_exists ? "Model Installed" : "Download Model";
 
-  installRuntimeButton.disabled = sharp.runtime_ready || !release.can_download_runtime;
+  installRuntimeButton.disabled = sharp.runtime_ready || !canInstallRuntime;
   downloadModelButton.disabled = !sharp.runtime_ready || sharp.checkpoint_exists;
   openStudioButton.disabled = !sharp.runtime_ready;
 
   runtimeStatus.textContent = sharp.runtime_ready ? "Installed" : "Required";
   runtimeHint.textContent = sharp.runtime_ready
     ? `Runtime ready at ${sharp.executable}.`
-    : release.runtime_install_mode === "windows-local"
-      ? "The app will download Python, install SHARP locally, and validate the runtime here."
-      : "Install the runtime into this app folder before continuing.";
+    : !canInstallRuntime
+      ? "No runtime installer is bundled with this build. Add runtime/run-sharp here or point the config at an existing SHARP install."
+      : release.runtime_install_mode === "windows-local"
+        ? "The app will download Python, install SHARP locally, and validate the runtime here."
+        : "Install the runtime into this app folder before continuing.";
 
   modelStatus.textContent = sharp.checkpoint_exists ? "Installed" : sharp.runtime_ready ? "Optional" : "Waiting";
   modelHint.textContent = sharp.checkpoint_exists
@@ -155,11 +164,15 @@ function applyStatus(payload) {
 
   if (!sharp.runtime_ready) {
     setActivity(
-      "Install the runtime",
-      "Start with Step 1. The app will prepare this machine for local SHARP runs.",
-      release.runtime_install_mode === "windows-local"
-        ? "On Windows Lite this includes local Python setup, SHARP install, and validation before the studio opens."
-        : "The runtime will be downloaded into the app folder so the initial build stays smaller.",
+      canInstallRuntime ? "Install the runtime" : "Runtime not found",
+      canInstallRuntime
+        ? "Start with Step 1. The app will prepare this machine for local SHARP runs."
+        : "This build cannot install SHARP for you. Add a bundled runtime or point the config at an existing SHARP install first.",
+      canInstallRuntime
+        ? (release.runtime_install_mode === "windows-local"
+            ? "On Windows Lite this includes local Python setup, SHARP install, and validation before the studio opens."
+            : "The runtime will be downloaded into the app folder so the initial build stays smaller.")
+        : "After the runtime exists, refresh this page and the studio will unlock automatically.",
       "Step 1",
     );
     return;

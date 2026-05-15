@@ -2,6 +2,7 @@ import sys
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -12,7 +13,11 @@ class ConfigTests(unittest.TestCase):
     def test_default_config_uses_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             tmp_path = Path(temp_dir)
-            config = SharpLabConfig.load(base_dir=tmp_path)
+            fake_home = tmp_path / "home"
+            fake_home.mkdir()
+
+            with mock.patch("sharp_lab.config.Path.home", return_value=fake_home):
+                config = SharpLabConfig.load(base_dir=tmp_path)
 
             self.assertEqual(config.paths.workspace, (tmp_path / "workspace").resolve())
             self.assertEqual(config.paths.imports, (tmp_path / "workspace" / "imports").resolve())
@@ -36,7 +41,32 @@ class ConfigTests(unittest.TestCase):
             checkpoint_path = runtime_models / "sharp_2572gikvuh.pt"
             checkpoint_path.write_text("", encoding="utf-8")
 
-            config = SharpLabConfig.default(base_dir=tmp_path)
+            fake_home = tmp_path / "home"
+            fake_home.mkdir()
+
+            with mock.patch("sharp_lab.config.Path.home", return_value=fake_home):
+                config = SharpLabConfig.default(base_dir=tmp_path)
+
+            self.assertEqual(config.sharp.executable, executable_path.resolve())
+            self.assertEqual(config.sharp.checkpoint, checkpoint_path.resolve())
+
+    def test_default_config_falls_back_to_desktop_ml_sharp_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tmp_path = Path(temp_dir)
+            fake_home = tmp_path / "home"
+            runtime_root = fake_home / "Desktop" / "ml-sharp"
+            runtime_root.mkdir(parents=True)
+
+            executable_name = "run-sharp.exe" if sys.platform == "win32" else "run-sharp"
+            executable_path = runtime_root / executable_name
+            executable_path.write_text("", encoding="utf-8")
+
+            checkpoint_path = runtime_root / "models" / "sharp_2572gikvuh.pt"
+            checkpoint_path.parent.mkdir(parents=True)
+            checkpoint_path.write_text("", encoding="utf-8")
+
+            with mock.patch("sharp_lab.config.Path.home", return_value=fake_home):
+                config = SharpLabConfig.default(base_dir=tmp_path)
 
             self.assertEqual(config.sharp.executable, executable_path.resolve())
             self.assertEqual(config.sharp.checkpoint, checkpoint_path.resolve())

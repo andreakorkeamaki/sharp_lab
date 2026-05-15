@@ -188,14 +188,15 @@ def _default_sharp_paths(root: Path) -> tuple[Path, Path | None]:
     bundled_root = root / BUNDLED_RUNTIME_DIR
     default_sharp_root = Path.home() / "Desktop" / "ml-sharp"
     bundled_candidates = _bundled_executable_candidates(root, bundled_root)
-    executable = _first_existing_path(bundled_candidates)
+    external_candidates = _external_executable_candidates(default_sharp_root)
+    executable = _first_existing_path(bundled_candidates + external_candidates)
     if executable is None:
         executable = bundled_candidates[0]
 
     checkpoint = _first_existing_path(_bundled_checkpoint_candidates(root, bundled_root))
     if checkpoint is None:
         default_checkpoint = default_sharp_root / "models" / "sharp_2572gikvuh.pt"
-        checkpoint = default_checkpoint if default_checkpoint.exists() else None
+        checkpoint = default_checkpoint.resolve() if default_checkpoint.exists() else None
 
     return executable, checkpoint
 
@@ -206,6 +207,11 @@ def _bundled_executable_candidates(root: Path, bundled_root: Path) -> list[Path]
     return [directory / executable_name for directory in search_dirs for executable_name in executable_names]
 
 
+def _external_executable_candidates(default_sharp_root: Path) -> list[Path]:
+    executable_names = ("run-sharp.exe", "run-sharp.bat", "run-sharp.cmd") if os.name == "nt" else ("run-sharp",)
+    return [default_sharp_root / executable_name for executable_name in executable_names]
+
+
 def _bundled_checkpoint_candidates(root: Path, bundled_root: Path) -> list[Path]:
     search_dirs = (
         bundled_root / "models",
@@ -214,6 +220,8 @@ def _bundled_checkpoint_candidates(root: Path, bundled_root: Path) -> list[Path]
         root,
     )
     return [directory / checkpoint_name for directory in search_dirs for checkpoint_name in CHECKPOINT_FILENAMES]
+
+
 def _first_existing_path(candidates: list[Path]) -> Path | None:
     for candidate in candidates:
         if candidate.exists():

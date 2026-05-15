@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from sharp_lab.app import SharpLabApplication
 
@@ -130,7 +130,7 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
     def _serialize_run(self, run: Any) -> dict[str, object]:
         payload = run.to_dict() if hasattr(run, "to_dict") else dict(run)
         payload["viewer_urls"] = [
-            f"/artifacts/{payload['run_id']}/{filename}"
+            f"/artifacts/{payload['run_id']}/{quote(filename, safe='')}"
             for filename in payload.get("ply_files", [])
         ]
         return payload

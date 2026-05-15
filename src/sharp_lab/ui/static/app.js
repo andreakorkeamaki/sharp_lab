@@ -490,13 +490,16 @@ function updateLatestRun(run) {
   openLatestRunButton.disabled = !run.viewer_urls?.length;
 }
 
-function describeSetup(sharp) {
+function describeSetup(sharp, release) {
   if (!sharp.executable_exists) {
+    const canInstallRuntime = Boolean(release?.can_download_runtime);
     return {
       runtime: "missing runtime",
       checkpoint: "waiting for runtime",
-      title: "This download still needs the SHARP runtime",
-      hint: "Bundle run-sharp with the app in a runtime folder, or install the SHARP runtime on this machine before running predictions.",
+      title: canInstallRuntime ? "This build still needs the SHARP runtime" : "No local SHARP runtime was found",
+      hint: canInstallRuntime
+        ? "Open Setup to install the SHARP runtime into this app folder before running predictions."
+        : "This workspace does not include a bundled SHARP runtime. Add runtime/run-sharp here, point sharp_lab.toml at an existing SHARP install, or use a packaged build that already bundles the runtime.",
       canDownload: false,
       quiet: false,
     };
@@ -769,7 +772,7 @@ async function fetchConfig() {
   const payload = await response.json();
   currentAppConfig = payload;
   currentSharpConfig = payload.sharp;
-  const setup = describeSetup(payload.sharp);
+  const setup = describeSetup(payload.sharp, payload.release);
   workspacePath.textContent = payload.workspace;
   sharpStatus.textContent = setup.runtime;
   checkpointStatus.textContent = setup.checkpoint;
