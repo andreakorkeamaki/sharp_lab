@@ -22,7 +22,7 @@ DEFAULT_SHARP_REPO_URL = "https://github.com/apple/ml-sharp.git"
 DEFAULT_SHARP_REPO_REF = "1eaa046834b81852261262b41b0919f5c1efdd2e"
 DEFAULT_SHARP_SOURCE_URL = f"https://github.com/apple/ml-sharp/archive/{DEFAULT_SHARP_REPO_REF}.zip"
 DEFAULT_RELEASE_REPOSITORY = "andreakorkeamaki/sharp_lab"
-DEFAULT_RELEASE_VERSION = "v0.1.15"
+DEFAULT_RELEASE_VERSION = "v0.1.16"
 
 
 StatusCallback = Callable[[str, float | None, str | None], None]
