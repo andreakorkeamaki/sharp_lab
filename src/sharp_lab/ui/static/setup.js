@@ -23,6 +23,14 @@ const modelProgressBar = document.getElementById("model-progress-bar");
 const modelProgressText = document.getElementById("model-progress-text");
 const downloadModelButton = document.getElementById("download-model");
 
+const cudaStep = document.getElementById("cuda-step");
+const cudaStatus = document.getElementById("cuda-status");
+const cudaHint = document.getElementById("cuda-hint");
+const cudaProgressBlock = document.getElementById("cuda-progress-block");
+const cudaProgressBar = document.getElementById("cuda-progress-bar");
+const cudaProgressText = document.getElementById("cuda-progress-text");
+const enableCudaButton = document.getElementById("enable-cuda");
+
 const blenderStep = document.getElementById("blender-step");
 const blenderStatus = document.getElementById("blender-status");
 const blenderHint = document.getElementById("blender-hint");
@@ -39,6 +47,7 @@ const openStudioButton = document.getElementById("open-studio");
 let currentConfig = null;
 let runtimePoller = null;
 let modelPoller = null;
+let cudaPoller = null;
 let blenderPoller = null;
 
 function setActivity(title, message, detail, badge = "Preparing") {
@@ -118,9 +127,11 @@ function renderTask(task, progressBlock, progressBar, progressText, idleText) {
 
 function applyStatus(payload) {
   currentConfig = payload;
-  const { sharp, release, blender_addon: blenderAddon } = payload;
+  const { sharp, release, blender_addon: blenderAddon, cuda } = payload;
   const isComplete = sharp.runtime_ready && sharp.checkpoint_exists;
   const canInstallRuntime = Boolean(release.can_download_runtime);
+  const canEnableCuda = Boolean(cuda?.available);
+  const cudaEnabled = Boolean(cuda?.enabled);
   const canDownloadBlenderAddon = Boolean(blenderAddon?.available);
   const blenderAddonDownloaded = Boolean(blenderAddon?.downloaded);
 
@@ -139,10 +150,12 @@ function applyStatus(payload) {
       ? "Install Runtime"
       : "Runtime Not Bundled";
   downloadModelButton.textContent = sharp.checkpoint_exists ? "Model Installed" : "Download Model";
-  downloadBlenderAddonButton.textContent = blenderAddonDownloaded ? "Add-on Downloaded" : "Download Add-on";
+  enableCudaButton.textContent = cudaEnabled ? "CUDA Enabled" : "Enable CUDA";
+  downloadBlenderAddonButton.textContent = blenderAddonDownloaded ? "Add-on Downloaded" : "Open Download Page";
 
   installRuntimeButton.disabled = sharp.runtime_ready || !canInstallRuntime;
   downloadModelButton.disabled = !sharp.runtime_ready || sharp.checkpoint_exists;
+  enableCudaButton.disabled = !sharp.runtime_ready || !canEnableCuda || cudaEnabled;
   downloadBlenderAddonButton.disabled = !canDownloadBlenderAddon || blenderAddonDownloaded;
   openStudioButton.disabled = !sharp.runtime_ready;
 
@@ -164,11 +177,18 @@ function applyStatus(payload) {
           : "The Apple model can be downloaded after runtime install.")
       : "Install the runtime first, then this step becomes available.";
 
+  cudaStatus.textContent = cudaEnabled ? "Enabled" : canEnableCuda ? "Optional" : "Unavailable";
+  cudaHint.textContent = cudaEnabled
+    ? `CUDA PyTorch ready in this runtime${cuda.torch_cuda ? ` (${cuda.torch_cuda})` : ""}. Use Device: CUDA with an NVIDIA GPU.`
+    : canEnableCuda
+      ? "Install CUDA-enabled PyTorch wheels into this runtime. This is only for Windows machines with NVIDIA GPUs and can download several GB."
+      : "CUDA setup is only available after a Windows runtime is installed.";
+
   blenderStatus.textContent = blenderAddonDownloaded ? "Downloaded" : canDownloadBlenderAddon ? "Optional" : "Unavailable";
   blenderHint.textContent = blenderAddonDownloaded
     ? `Add-on zip ready at ${blenderAddon.path}. Install it from Blender Preferences when you need Blender import.`
     : canDownloadBlenderAddon
-      ? `Download the Blender add-on zip into ${blenderAddon.folder}.`
+      ? "Open the download page for the Blender add-on zip and installation instructions."
       : "This build does not declare a Blender add-on download for this platform.";
 
   studioStatus.textContent = sharp.runtime_ready ? "Ready" : "Locked";
@@ -180,6 +200,7 @@ function applyStatus(payload) {
 
   setStepState(runtimeStep, sharp.runtime_ready ? "done" : "active");
   setStepState(modelStep, !sharp.runtime_ready ? "locked" : sharp.checkpoint_exists ? "done" : "active");
+  setStepState(cudaStep, !sharp.runtime_ready || !canEnableCuda ? "locked" : cudaEnabled ? "done" : "active");
   setStepState(blenderStep, blenderAddonDownloaded ? "done" : canDownloadBlenderAddon ? "active" : "locked");
   setStepState(studioStep, !sharp.runtime_ready ? "locked" : "active");
 
@@ -246,6 +267,7 @@ async function refreshTask(kind) {
       sharp: payload.sharp,
       release: payload.release,
       blender_addon: payload.blender_addon || currentConfig.blender_addon,
+      cuda: payload.cuda || currentConfig.cuda,
     });
   }
 
@@ -253,6 +275,8 @@ async function refreshTask(kind) {
     renderTask(payload.task, runtimeProgressBlock, runtimeProgressBar, runtimeProgressText, "No runtime install in progress.");
   } else if (kind === "model") {
     renderTask(payload.task, modelProgressBlock, modelProgressBar, modelProgressText, "No model download in progress.");
+  } else if (kind === "cuda") {
+    renderTask(payload.task, cudaProgressBlock, cudaProgressBar, cudaProgressText, "No CUDA install in progress.");
   } else {
     renderTask(payload.task, blenderProgressBlock, blenderProgressBar, blenderProgressText, "No Blender add-on download in progress.");
   }
@@ -269,6 +293,10 @@ function stopPolling(kind) {
     clearInterval(modelPoller);
     modelPoller = null;
   }
+  if (kind === "cuda" && cudaPoller) {
+    clearInterval(cudaPoller);
+    cudaPoller = null;
+  }
   if (kind === "blender-addon" && blenderPoller) {
     clearInterval(blenderPoller);
     blenderPoller = null;
@@ -284,6 +312,9 @@ function startPolling(kind) {
   } else if (kind === "model") {
     downloadModelButton.disabled = true;
     setStepState(modelStep, "active");
+  } else if (kind === "cuda") {
+    enableCudaButton.disabled = true;
+    setStepState(cudaStep, "active");
   } else {
     downloadBlenderAddonButton.disabled = true;
     setStepState(blenderStep, "active");
@@ -310,25 +341,35 @@ function startPolling(kind) {
             "The studio can now run without waiting for a first-run model fetch.",
             "Step 2",
           );
+        } else if (kind === "cuda" && task.status === "completed") {
+          setActivity(
+            "NVIDIA CUDA enabled",
+            "CUDA-enabled PyTorch is installed in this runtime.",
+            "Use Device: CUDA in Sharp Lab or Blender on Windows machines with NVIDIA GPUs.",
+            "Step 3",
+          );
         } else if (kind === "blender-addon" && task.status === "completed") {
           setActivity(
             "Blender add-on downloaded",
-            `Step 3 finished. Add-on saved to ${task.result_path}.`,
+            `Step 4 finished. Add-on saved to ${task.result_path}.`,
             "Install this zip from Blender Preferences when you want Blender to read the same Sharp Lab workspace.",
-            "Step 3",
+            "Step 4",
           );
         } else if (task.status === "failed") {
           const isRuntime = kind === "runtime";
+          const isCuda = kind === "cuda";
           const isBlender = kind === "blender-addon";
           setActivity(
-            isRuntime ? "Runtime install failed" : isBlender ? "Blender add-on download failed" : "Model download failed",
+            isRuntime ? "Runtime install failed" : isCuda ? "CUDA install failed" : isBlender ? "Blender add-on download failed" : "Model download failed",
             task.error || task.message,
             isRuntime
               ? "Retry Step 1 after checking the network and local folder permissions."
+              : isCuda
+                ? "Retry Step 3 after checking the network, disk space, NVIDIA drivers, and local folder permissions."
               : isBlender
-                ? "Retry Step 3 after checking the network and local folder permissions."
+                ? "Retry Step 4 after checking the network and local folder permissions."
                 : "Retry Step 2, or place the model manually into the runtime models folder.",
-            isRuntime ? "Step 1" : isBlender ? "Step 3" : "Step 2",
+            isRuntime ? "Step 1" : isCuda ? "Step 3" : isBlender ? "Step 4" : "Step 2",
           );
         }
       } else if (kind === "runtime") {
@@ -349,12 +390,19 @@ function startPolling(kind) {
           task.detail || "The Apple SHARP model is being saved into the local runtime folder.",
           "Step 2",
         );
+      } else if (kind === "cuda") {
+        setActivity(
+          "Installing NVIDIA CUDA",
+          task.message,
+          task.detail || "CUDA-enabled PyTorch wheels are being installed into the local runtime.",
+          "Step 3",
+        );
       } else if (kind === "blender-addon") {
         setActivity(
           "Downloading Blender add-on",
           task.message,
           task.detail || "The Blender add-on zip is being saved next to this Sharp Lab app.",
-          "Step 3",
+          "Step 4",
         );
       }
     } catch (error) {
@@ -369,6 +417,8 @@ function startPolling(kind) {
     runtimePoller = intervalId;
   } else if (kind === "model") {
     modelPoller = intervalId;
+  } else if (kind === "cuda") {
+    cudaPoller = intervalId;
   } else {
     blenderPoller = intervalId;
   }
@@ -422,27 +472,31 @@ async function downloadModel() {
   }
 }
 
-async function downloadBlenderAddon() {
-  downloadBlenderAddonButton.disabled = true;
+async function enableCuda() {
+  enableCudaButton.disabled = true;
   setActivity(
-    "Downloading Blender add-on",
-    "Fetching the Sharp Lab Blender add-on zip.",
-    "The file will be stored next to this Sharp Lab app so Blender can use the same workspace.",
+    "Installing NVIDIA CUDA",
+    "Installing CUDA-enabled PyTorch into this runtime.",
+    "This can download several GB. Keep the app open until it finishes.",
     "Step 3",
   );
 
   try {
-    const response = await fetch("/api/setup/download-blender-addon", { method: "POST" });
+    const response = await fetch("/api/setup/enable-cuda", { method: "POST" });
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.error || "Could not download the Blender add-on.");
+      throw new Error(payload.error || "Could not enable NVIDIA CUDA.");
     }
-    renderTask(payload.task, blenderProgressBlock, blenderProgressBar, blenderProgressText, "No Blender add-on download in progress.");
-    startPolling("blender-addon");
+    renderTask(payload.task, cudaProgressBlock, cudaProgressBar, cudaProgressText, "No CUDA install in progress.");
+    startPolling("cuda");
   } catch (error) {
     console.error(error);
-    setActivity("Blender add-on download failed", error.message, "Retry Step 3 after checking the network and local folder permissions.", "Step 3");
+    setActivity("CUDA install failed", error.message, "Retry Step 3 after checking the network, disk space, NVIDIA drivers, and local folder permissions.", "Step 3");
   }
+}
+
+function openBlenderAddonPage() {
+  window.open("/blender-addon", "_blank", "noopener");
 }
 
 function openStudio() {
@@ -452,7 +506,8 @@ function openStudio() {
 
 installRuntimeButton.addEventListener("click", installRuntime);
 downloadModelButton.addEventListener("click", downloadModel);
-downloadBlenderAddonButton.addEventListener("click", downloadBlenderAddon);
+enableCudaButton.addEventListener("click", enableCuda);
+downloadBlenderAddonButton.addEventListener("click", openBlenderAddonPage);
 openStudioButton.addEventListener("click", openStudio);
 
 refreshStatus().catch((error) => {
@@ -460,15 +515,19 @@ refreshStatus().catch((error) => {
   setActivity("Setup unavailable", error.message, "Reload the page after the local app finishes starting.", "Error");
 });
 
-Promise.allSettled([refreshTask("runtime"), refreshTask("model"), refreshTask("blender-addon")]).then((results) => {
+Promise.allSettled([refreshTask("runtime"), refreshTask("model"), refreshTask("cuda"), refreshTask("blender-addon")]).then((results) => {
   const runtimeTask = results[0].status === "fulfilled" ? results[0].value : null;
   const modelTask = results[1].status === "fulfilled" ? results[1].value : null;
-  const blenderTask = results[2].status === "fulfilled" ? results[2].value : null;
+  const cudaTask = results[2].status === "fulfilled" ? results[2].value : null;
+  const blenderTask = results[3].status === "fulfilled" ? results[3].value : null;
   if (runtimeTask?.status === "running") {
     startPolling("runtime");
   }
   if (modelTask?.status === "running") {
     startPolling("model");
+  }
+  if (cudaTask?.status === "running") {
+    startPolling("cuda");
   }
   if (blenderTask?.status === "running") {
     startPolling("blender-addon");

@@ -52,7 +52,7 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/assets/"):
             self._serve_static(parsed.path.removeprefix("/assets/"), send_body=False)
             return
-        if parsed.path in {"/", "/index.html", "/studio", "/setup"}:
+        if parsed.path in {"/", "/index.html", "/studio", "/setup", "/blender-addon"}:
             self._serve_static(_resolve_page(self.server.app, parsed.path), send_body=False)
             return
 
@@ -86,7 +86,7 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/assets/"):
             self._serve_static(parsed.path.removeprefix("/assets/"))
             return
-        if parsed.path in {"/", "/index.html", "/studio", "/setup"}:
+        if parsed.path in {"/", "/index.html", "/studio", "/setup", "/blender-addon"}:
             self._serve_static(_resolve_page(self.server.app, parsed.path))
             return
 
@@ -102,6 +102,9 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/setup/download-blender-addon":
             self._handle_download_blender_addon()
+            return
+        if parsed.path == "/api/setup/enable-cuda":
+            self._handle_enable_cuda()
             return
 
         if parsed.path == "/api/predict":
@@ -125,6 +128,7 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             "sharp": status,
             "release": self.server.app.release_status(),
             "blender_addon": self.server.app.blender_addon_status(),
+            "cuda": self.server.app.cuda_status(),
             "web": {
                 "host": self.server.app.config.web.host,
                 "port": self.server.app.config.web.port,
@@ -264,6 +268,23 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
             status=HTTPStatus.ACCEPTED,
         )
 
+    def _handle_enable_cuda(self) -> None:
+        try:
+            task = self.server.app.start_cuda_enablement()
+        except Exception as exc:
+            LOGGER.exception("CUDA runtime enablement failed")
+            self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_json(
+            {
+                "task": task,
+                "cuda": self.server.app.cuda_status(),
+                "sharp": self.server.app.sharp_status(),
+            },
+            status=HTTPStatus.ACCEPTED,
+        )
+
     def _handle_decimate(self, path: str) -> None:
         parts = [part for part in path.split("/") if part]
         if len(parts) != 4:
@@ -304,13 +325,14 @@ class SharpLabRequestHandler(BaseHTTPRequestHandler):
 
     def _download_status_payload(self, path: str) -> dict[str, object]:
         kind = path.removeprefix("/api/setup/downloads/").strip("/")
-        if kind not in {"runtime", "model", "blender-addon"}:
+        if kind not in {"runtime", "model", "blender-addon", "cuda"}:
             raise FileNotFoundError(f"Unknown download kind: {kind}")
         return {
             "task": self.server.app.download_status(kind),
             "sharp": self.server.app.sharp_status(),
             "release": self.server.app.release_status(),
             "blender_addon": self.server.app.blender_addon_status(),
+            "cuda": self.server.app.cuda_status(),
         }
 
 
@@ -343,6 +365,8 @@ def _guess_content_type(filename: str) -> str:
 def _resolve_page(app: SharpLabApplication, path: str) -> str:
     if path == "/setup":
         return "setup.html"
+    if path == "/blender-addon":
+        return "blender-addon.html"
     if path == "/studio":
         return "index.html"
     if path == "/":

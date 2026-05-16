@@ -5,7 +5,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from sharp_lab.sharp import SharpRunRecord
-from sharp_lab.ui.server import SharpLabRequestHandler
+from sharp_lab.ui.server import SharpLabRequestHandler, _resolve_page
 
 
 class UIServerTests(unittest.TestCase):
@@ -31,6 +31,9 @@ class UIServerTests(unittest.TestCase):
             payload["viewer_urls"],
             ["/artifacts/20260311T150747Z-splat-3/splat%233%20final.ply"],
         )
+
+    def test_resolve_page_serves_blender_addon_download_page(self) -> None:
+        self.assertEqual(_resolve_page(None, "/blender-addon"), "blender-addon.html")
 
 
 if __name__ == "__main__":

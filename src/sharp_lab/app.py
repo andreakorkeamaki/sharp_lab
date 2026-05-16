@@ -7,7 +7,7 @@ from sharp_lab.discovery import ImageDiscoveryService
 from sharp_lab.downloads import DownloadTaskManager
 from sharp_lab.export import ExportManager
 from sharp_lab.pipeline import PreprocessingPipeline
-from sharp_lab.release import BlenderAddonDownloadService, ReleaseManifest, RuntimeInstallService
+from sharp_lab.release import CudaRuntimeService, BlenderAddonDownloadService, ReleaseManifest, RuntimeInstallService
 from sharp_lab.sharp import SharpIntegrationService, SharpRunRecord
 
 
@@ -20,6 +20,7 @@ class SharpLabApplication:
         self.release = ReleaseManifest.load(config.base_dir)
         self.runtime_installer = RuntimeInstallService(config.base_dir)
         self.blender_addon_downloader = BlenderAddonDownloadService(config.base_dir)
+        self.cuda_runtime = CudaRuntimeService(config.base_dir)
         self.downloads = DownloadTaskManager()
         self.sharp_service = SharpIntegrationService(
             runs_dir=self.config.paths.runs,
@@ -66,6 +67,9 @@ class SharpLabApplication:
     def blender_addon_status(self) -> dict[str, object]:
         return self.blender_addon_downloader.status(self.release)
 
+    def cuda_status(self) -> dict[str, object]:
+        return self.cuda_runtime.status()
+
     def install_runtime(self) -> Path:
         return self.runtime_installer.install_from_manifest(self.release)
 
@@ -97,6 +101,14 @@ class SharpLabApplication:
                 self.release,
                 progress_callback=reporter.download,
             ),
+        )
+        return task.to_dict()
+
+    def start_cuda_enablement(self) -> dict[str, object]:
+        task = self.downloads.start(
+            "cuda",
+            start_message="Starting NVIDIA CUDA enablement.",
+            worker=lambda reporter: self.cuda_runtime.enable_cuda(status_callback=reporter.status),
         )
         return task.to_dict()
 

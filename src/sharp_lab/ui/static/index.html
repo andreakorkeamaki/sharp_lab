@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>sharp_lab Local Studio</title>
+    <title>sharp_lab Lite</title>
     <link rel="stylesheet" href="/assets/app.css" />
     <script type="importmap">
       {
@@ -16,251 +16,286 @@
   </head>
   <body>
     <div class="app-shell">
-      <header class="masthead">
-        <div>
-          <p class="eyebrow">sharp_lab</p>
-          <h1>Local SHARP Studio</h1>
-          <p class="lede">Generate locally, browse your run history, then open a dedicated editor to inspect, orient, and export the result.</p>
-          <section id="setup-banner" class="setup-banner" aria-live="polite">
-            <p class="label">Setup</p>
-            <h2 id="setup-title">Checking local SHARP runtime</h2>
-            <p id="setup-hint" class="hint">The app will tell you whether the runtime is bundled, whether the model auto-downloads, or whether setup is still missing.</p>
-            <div class="setup-download-progress">
-              <div class="progress-track progress-track-compact" aria-hidden="true">
-                <div id="setup-download-progress-bar" class="progress-bar"></div>
-              </div>
-              <p id="setup-download-progress-text" class="hint">No model download in progress.</p>
-            </div>
-            <div class="button-row button-row-tight">
-              <button id="download-model" type="button" class="secondary" hidden>Download Apple Model</button>
-              <button id="open-setup" type="button" class="secondary">Setup</button>
-            </div>
-          </section>
+      <aside class="sidebar" aria-label="Sharp Lab sections">
+        <a class="brand" href="/studio" aria-label="Sharp Lab Lite">
+          <span class="brand-mark">S</span>
+          <span class="brand-copy">SHARP_LAB <small>LITE</small></span>
+        </a>
+
+        <nav class="side-nav" aria-label="Workspace views">
+          <button type="button" class="side-link active" data-view-target="process">
+            <span class="nav-icon">~</span>
+            <span><strong>Process</strong><small>Create a new run</small></span>
+          </button>
+          <button type="button" class="side-link" data-view-target="runs">
+            <span class="nav-icon">□</span>
+            <span><strong>Runs</strong><small>History & outputs</small></span>
+          </button>
+          <button type="button" class="side-link" data-view-target="editor">
+            <span class="nav-icon">⌁</span>
+            <span><strong>Editor</strong><small>Inspect & optimize</small></span>
+          </button>
+          <button type="button" id="nav-open-setup" class="side-link">
+            <span class="nav-icon">⚙</span>
+            <span><strong>System</strong><small>Setup & tools</small></span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <p class="footer-title">SHARP_LAB LITE</p>
+          <p class="footer-version">v0.1.17</p>
+          <div class="mini-status">
+            <span>Runtime</span>
+            <strong id="sharp-status">-</strong>
+          </div>
+          <div class="mini-status">
+            <span>Model</span>
+            <strong id="checkpoint-status">-</strong>
+          </div>
         </div>
-        <dl class="status-strip">
-          <div>
-            <dt>Workspace</dt>
-            <dd id="workspace-path">-</dd>
-          </div>
-          <div>
-            <dt>SHARP</dt>
-            <dd id="sharp-status">-</dd>
-          </div>
-          <div>
-            <dt>Checkpoint</dt>
-            <dd id="checkpoint-status">-</dd>
-          </div>
-        </dl>
-      </header>
+      </aside>
 
-      <nav class="view-nav" aria-label="Workspace views">
-        <button type="button" class="nav-chip active" data-view-target="process">Process</button>
-        <button type="button" class="nav-chip" data-view-target="runs">Runs</button>
-        <button type="button" class="nav-chip" data-view-target="editor">Editor</button>
-        <button type="button" id="nav-open-setup" class="nav-chip nav-chip-secondary">Setup</button>
-      </nav>
+      <div class="workspace">
+        <header class="topbar">
+          <nav class="view-nav" aria-label="Workspace views">
+            <button type="button" class="nav-chip active" data-view-target="process">Process</button>
+            <button type="button" class="nav-chip" data-view-target="runs">Runs</button>
+            <button type="button" class="nav-chip" data-view-target="editor">Editor</button>
+            <button type="button" id="open-setup" class="nav-chip nav-chip-secondary">System</button>
+          </nav>
+          <div class="top-actions" aria-label="System actions">
+            <button type="button" class="icon-button" aria-label="Theme">☼</button>
+            <button type="button" class="icon-button" aria-label="More">•••</button>
+            <span class="status-dot" aria-hidden="true"></span>
+          </div>
+        </header>
 
-      <main class="views">
-        <section id="view-process" class="view-panel active" data-view="process">
-          <div class="process-grid">
-            <section class="card card-accent">
+        <main class="views">
+          <section id="view-process" class="view-panel active" data-view="process">
+            <div class="process-grid">
+              <section class="panel run-panel">
+                <p class="label">New sharp run</p>
+                <h1>Create a new run</h1>
+                <p class="lede">Generate 3D splats from an image or folder.</p>
+
+                <label class="drop-zone" for="input-path">
+                  <span class="drop-plus">+</span>
+                  <span>Paste, type, or drag an input path</span>
+                  <small>image or folder</small>
+                </label>
+
+                <label class="field-label" for="input-path">Input path</label>
+                <div class="input-with-action">
+                  <input id="input-path" type="text" placeholder="/Users/andrea/Desktop/applesharp" spellcheck="false" />
+                  <button type="button" class="icon-button field-button" aria-label="Browse input">□</button>
+                </div>
+
+                <div class="form-grid">
+                  <div>
+                    <label class="field-label" for="device">Device</label>
+                    <select id="device">
+                      <option value="">Default (Auto)</option>
+                      <option value="cpu">CPU</option>
+                      <option value="mps">MPS</option>
+                      <option value="cuda">CUDA</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label" for="quality-preset">Quality preset</label>
+                    <select id="quality-preset">
+                      <option>Balanced</option>
+                      <option>Fast preview</option>
+                      <option>High detail</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="primary-action-row">
+                  <button id="run-button" type="button">→ Start sharp run</button>
+                  <button id="jump-to-runs" type="button" class="secondary icon-only" aria-label="Browse runs">⌁</button>
+                </div>
+              </section>
+
+              <aside class="panel status-panel">
+                <section id="setup-banner" class="setup-banner" aria-live="polite">
+                  <div class="section-heading">
+                    <div>
+                      <p class="label">System status</p>
+                      <h2 id="setup-title">Checking local SHARP runtime</h2>
+                    </div>
+                    <button id="download-model" type="button" class="secondary" hidden>Download model</button>
+                  </div>
+                  <p id="setup-hint" class="hint">Checking runtime, model, and bundled tools.</p>
+                  <div class="setup-download-progress">
+                    <div class="progress-track progress-track-compact" aria-hidden="true">
+                      <div id="setup-download-progress-bar" class="progress-bar"></div>
+                    </div>
+                    <p id="setup-download-progress-text" class="hint">No model download in progress.</p>
+                  </div>
+                </section>
+
+                <section class="status-card">
+                  <div class="section-heading">
+                    <div>
+                      <p class="label">Current run</p>
+                      <h2 id="process-title">Ready to run</h2>
+                    </div>
+                    <div id="processing-badge" class="state-pill">Idle</div>
+                  </div>
+                  <div class="processing-state">
+                    <div id="processing-spinner" class="spinner" hidden></div>
+                    <div class="processing-copy">
+                      <p id="run-status" class="processing-message">Enter a path and start a SHARP run.</p>
+                      <p id="processing-detail" class="hint">The app will keep this page focused on processing until the run completes.</p>
+                    </div>
+                  </div>
+                  <dl class="run-metrics">
+                    <div>
+                      <dt>Status</dt>
+                      <dd id="processing-state-text">Idle</dd>
+                    </div>
+                    <div>
+                      <dt>Progress</dt>
+                      <dd><span>0%</span><span class="progress-track"><span id="progress-bar" class="progress-bar"></span></span></dd>
+                    </div>
+                    <div>
+                      <dt>Elapsed time</dt>
+                      <dd id="processing-elapsed">00:00</dd>
+                    </div>
+                    <div>
+                      <dt>Workspace</dt>
+                      <dd id="workspace-path">-</dd>
+                    </div>
+                  </dl>
+                </section>
+              </aside>
+            </div>
+
+            <section class="panel latest-card">
               <div class="section-heading">
                 <div>
-                  <p class="label">Generate</p>
-                  <h2>Create a new SHARP run</h2>
-                </div>
-              </div>
-
-              <label class="field-label" for="input-path">Input image or folder</label>
-              <input id="input-path" type="text" placeholder="/Users/you/Desktop/applesharp" spellcheck="false" />
-
-              <label class="field-label" for="device">Device</label>
-              <select id="device">
-                <option value="">Default</option>
-                <option value="cpu">CPU</option>
-                <option value="mps">MPS</option>
-                <option value="cuda">CUDA</option>
-              </select>
-
-              <div class="button-row">
-                <button id="run-button" type="button">Create Splat</button>
-                <button id="jump-to-runs" type="button" class="secondary">Browse Runs</button>
-              </div>
-
-              <p class="hint">Use this page only for processing. Editing controls are kept in a separate workspace after the run is ready.</p>
-            </section>
-
-            <section class="card processing-card">
-              <div class="section-heading">
-                <div>
-                  <p class="label">Processing</p>
-                  <h2 id="process-title">Ready to run</h2>
-                </div>
-                <div id="processing-badge" class="state-pill">Idle</div>
-              </div>
-
-              <div class="processing-state">
-                <div id="processing-spinner" class="spinner" hidden></div>
-                <div class="processing-copy">
-                  <p id="run-status" class="processing-message">Enter a path and start a SHARP run.</p>
-                  <p id="processing-detail" class="hint">The app will keep this page focused on processing until the run completes.</p>
-                </div>
-              </div>
-
-              <div class="progress-track" aria-hidden="true">
-                <div id="progress-bar" class="progress-bar"></div>
-              </div>
-
-              <dl class="meta-grid meta-grid-compact">
-                <div>
-                  <dt>State</dt>
-                  <dd id="processing-state-text">Idle</dd>
-                </div>
-                <div>
-                  <dt>Elapsed</dt>
-                  <dd id="processing-elapsed">00:00</dd>
-                </div>
-              </dl>
-            </section>
-
-            <section class="card latest-card">
-              <div class="section-heading">
-                <div>
-                  <p class="label">Latest Run</p>
+                  <p class="label">Latest runs</p>
                   <h2 id="latest-run-title">No run yet</h2>
                 </div>
-                <p id="run-count" class="count-pill">0</p>
+                <div class="button-row button-row-tight">
+                  <p id="run-count" class="count-pill">0</p>
+                  <button id="open-latest-run" type="button" class="secondary" disabled>Open editor</button>
+                  <button id="refresh-runs" type="button" class="secondary">Refresh</button>
+                </div>
               </div>
-
               <p id="latest-run-summary" class="hint">Your latest run will appear here with a shortcut into the editor.</p>
-              <div class="button-row">
-                <button id="open-latest-run" type="button" class="secondary" disabled>Open in Editor</button>
-                <button id="refresh-runs" type="button" class="secondary">Refresh Runs</button>
-              </div>
             </section>
-          </div>
-        </section>
+          </section>
 
-        <section id="view-runs" class="view-panel" data-view="runs">
-          <section class="card runs-card">
-            <div class="section-heading">
-              <div>
-                <p class="label">Runs</p>
-                <h2>Run history</h2>
-              </div>
-              <div class="button-row button-row-tight">
+          <section id="view-runs" class="view-panel" data-view="runs">
+            <section class="panel runs-card">
+              <div class="section-heading">
+                <div>
+                  <p class="label">Runs</p>
+                  <h1>Run history</h1>
+                </div>
                 <button id="runs-refresh-top" type="button" class="secondary">Refresh</button>
               </div>
-            </div>
-            <p class="hint">Open any completed run to jump straight into the editor. Failed runs keep their logs so you can inspect what happened.</p>
-            <div id="runs-list" class="runs-list"></div>
+              <div class="runs-table-head" aria-hidden="true">
+                <span>ID</span>
+                <span>Input</span>
+                <span>Status</span>
+                <span>Actions</span>
+              </div>
+              <div id="runs-list" class="runs-list"></div>
+            </section>
           </section>
-        </section>
 
-        <section id="view-editor" class="view-panel" data-view="editor">
-          <section class="viewer-shell viewer-shell-editor">
-            <div class="editor-hud">
-              <div class="editor-hud-title">
-                <p class="viewer-label">Editor</p>
-                <h2 id="viewer-title">No splat loaded</h2>
-                <p id="editor-status" class="hint">Choose a completed run from the Runs page to start editing.</p>
+          <section id="view-editor" class="view-panel" data-view="editor">
+            <section class="viewer-shell viewer-shell-editor">
+              <div class="editor-hud">
+                <div class="editor-hud-title">
+                  <p class="viewer-label">Editor</p>
+                  <h2 id="viewer-title">No splat loaded</h2>
+                  <p id="editor-status" class="hint">Choose a completed run from the Runs page to start editing.</p>
+                </div>
+                <div class="editor-hud-actions">
+                  <button id="toggle-run-info" type="button" class="secondary hud-button">Run Info</button>
+                  <button id="toggle-fly-mode" type="button" class="secondary hud-button">Enter Fly Mode</button>
+                </div>
               </div>
-              <div class="editor-hud-actions">
-                <button id="toggle-run-info" type="button" class="secondary hud-button">Run Info</button>
-                <button id="toggle-fly-mode" type="button" class="secondary hud-button">Enter Fly Mode</button>
-              </div>
-            </div>
 
-            <section id="run-info-panel" class="floating-panel floating-panel-info is-hidden">
-              <div class="section-heading">
-                <div>
-                  <p class="label">Run</p>
-                  <h2>Current output</h2>
-                </div>
-              </div>
-              <dl class="meta-grid">
-                <div>
-                  <dt>Run ID</dt>
-                  <dd id="editor-run-id">-</dd>
-                </div>
-                <div>
-                  <dt>Source</dt>
-                  <dd id="editor-source">-</dd>
-                </div>
-                <div>
-                  <dt>Output</dt>
-                  <dd id="editor-output">-</dd>
-                </div>
-                <div>
-                  <dt>Active File</dt>
-                  <dd id="editor-file">-</dd>
-                </div>
-              </dl>
-            </section>
-
-            <section class="floating-panel floating-panel-left">
-              <div class="section-heading">
-                <div>
-                  <p class="label">Camera</p>
-                  <h2>View controls</h2>
-                </div>
-              </div>
-              <div class="compact-grid">
-                <button id="refit-camera" type="button" class="secondary">Refit</button>
-                <button id="flip-x" type="button" class="secondary">Flip X</button>
-                <button id="flip-y" type="button" class="secondary">Flip Y</button>
-                <button id="flip-z" type="button" class="secondary">Flip Z</button>
-                <button id="turn-left" type="button" class="secondary">Left 90</button>
-                <button id="turn-right" type="button" class="secondary">Right 90</button>
-                <button id="reset-pose" type="button" class="secondary">Reset</button>
-              </div>
-              <p class="hint" id="fly-mode-hint">Orbit with the mouse, or enter fly mode for drag-to-look navigation.</p>
-            </section>
-
-            <div class="floating-stack floating-stack-right">
-              <section class="floating-panel floating-panel-compact">
+              <section id="run-info-panel" class="floating-panel floating-panel-info is-hidden">
                 <div class="section-heading">
                   <div>
-                    <p class="label">Optimize</p>
-                    <h2>Decimate</h2>
+                    <p class="label">Run</p>
+                    <h2>Current output</h2>
                   </div>
                 </div>
-                <label class="field-label" for="artifact-select">Active PLY</label>
-                <select id="artifact-select"></select>
-
-                <label class="field-label" for="decimation-ratio">Keep percent</label>
-                <div class="slider-row">
-                  <input id="decimation-ratio" type="range" min="10" max="90" step="10" value="50" />
-                  <span id="decimation-value" class="count-pill">50%</span>
-                </div>
-
-                <div class="button-stack">
-                  <button id="decimate-run" type="button">Create Copy</button>
-                </div>
+                <dl class="meta-grid">
+                  <div><dt>Run ID</dt><dd id="editor-run-id">-</dd></div>
+                  <div><dt>Source</dt><dd id="editor-source">-</dd></div>
+                  <div><dt>Output</dt><dd id="editor-output">-</dd></div>
+                  <div><dt>Active file</dt><dd id="editor-file">-</dd></div>
+                </dl>
               </section>
 
-              <section class="floating-panel floating-panel-compact">
+              <section class="floating-panel floating-panel-left">
                 <div class="section-heading">
                   <div>
-                    <p class="label">Export</p>
-                    <h2>Output</h2>
+                    <p class="label">Camera</p>
+                    <h2>View controls</h2>
                   </div>
                 </div>
-                <div class="button-stack">
-                  <button id="download-ply" type="button">Download PLY</button>
-                  <button id="copy-output-path" type="button" class="secondary">Copy Path</button>
+                <div class="compact-grid">
+                  <button id="refit-camera" type="button" class="secondary">Refit</button>
+                  <button id="flip-x" type="button" class="secondary">Flip X</button>
+                  <button id="flip-y" type="button" class="secondary">Flip Y</button>
+                  <button id="flip-z" type="button" class="secondary">Flip Z</button>
+                  <button id="turn-left" type="button" class="secondary">Left 90</button>
+                  <button id="turn-right" type="button" class="secondary">Right 90</button>
+                  <button id="reset-pose" type="button" class="secondary">Reset</button>
                 </div>
+                <p class="hint" id="fly-mode-hint">Orbit with the mouse, or enter fly mode for drag-to-look navigation.</p>
               </section>
-            </div>
 
-            <div class="viewer-stage">
-              <div id="canvas-wrap" class="canvas-wrap"></div>
-            </div>
+              <div class="floating-stack floating-stack-right">
+                <section class="floating-panel floating-panel-compact">
+                  <div class="section-heading">
+                    <div>
+                      <p class="label">Optimize</p>
+                      <h2>Decimate</h2>
+                    </div>
+                  </div>
+                  <label class="field-label" for="artifact-select">Active PLY</label>
+                  <select id="artifact-select"></select>
+                  <label class="field-label" for="decimation-ratio">Keep percent</label>
+                  <div class="slider-row">
+                    <input id="decimation-ratio" type="range" min="10" max="90" step="10" value="50" />
+                    <span id="decimation-value" class="count-pill">50%</span>
+                  </div>
+                  <div class="button-stack">
+                    <button id="decimate-run" type="button">Create Copy</button>
+                  </div>
+                </section>
+
+                <section class="floating-panel floating-panel-compact">
+                  <div class="section-heading">
+                    <div>
+                      <p class="label">Export</p>
+                      <h2>Output</h2>
+                    </div>
+                  </div>
+                  <div class="button-stack">
+                    <button id="download-ply" type="button">Download PLY</button>
+                    <button id="copy-output-path" type="button" class="secondary">Copy Path</button>
+                  </div>
+                </section>
+              </div>
+
+              <div class="viewer-stage">
+                <div id="canvas-wrap" class="canvas-wrap"></div>
+              </div>
+            </section>
           </section>
-        </section>
-      </main>
+        </main>
+      </div>
     </div>
-
-    <script type="module" src="/assets/app.js"></script>
+    <script src="/assets/app.js" type="module"></script>
   </body>
 </html>

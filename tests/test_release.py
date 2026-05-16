@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from sharp_lab.release import (
     RELEASE_MANIFEST_FILE,
     BlenderAddonDownloadService,
+    CudaRuntimeService,
     ReleaseManifest,
     RuntimeInstallService,
     _parse_install_output_line,
@@ -147,6 +148,33 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(addon_path.read_bytes(), b"zip-data")
             status = service.status(manifest)
             self.assertTrue(status["downloaded"])
+
+    def test_cuda_runtime_service_installs_cuda_torch_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            python_exe = root / "runtime" / "python" / "tools" / "python.exe"
+            python_exe.parent.mkdir(parents=True)
+            python_exe.write_text("", encoding="utf-8")
+            service = CudaRuntimeService(root)
+
+            def fake_run(command, cwd=None, capture_output=True, text=True, check=False):
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout='{"torch_version": "2.8.0+cu126", "torch_cuda": "12.6"}\n',
+                    stderr="",
+                )
+
+            with mock.patch("sharp_lab.release.os.name", "nt"):
+                with mock.patch.object(RuntimeInstallService, "_run") as pip_install:
+                    with mock.patch("sharp_lab.release.subprocess.run", side_effect=fake_run):
+                        runtime_path = service.enable_cuda()
+
+            self.assertEqual(runtime_path, (root / "runtime").resolve())
+            self.assertIn("--index-url", pip_install.call_args.args[0])
+            marker = json.loads((root / "runtime" / "cuda-runtime.json").read_text(encoding="utf-8"))
+            self.assertEqual(marker["torch_cuda"], "12.6")
+            self.assertTrue(service.status()["enabled"])
 
     def test_runtime_install_service_accepts_nested_runtime_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

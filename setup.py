@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="sharp_lab",
-    version="0.1.16",
+    version="0.1.17",
     description="Local tools for experimenting with iPhone photos and preparing assets for Apple SHARP workflows.",
     package_dir={"": "src"},
     packages=find_packages(where="src"),

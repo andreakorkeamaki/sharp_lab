@@ -22,7 +22,9 @@ DEFAULT_SHARP_REPO_URL = "https://github.com/apple/ml-sharp.git"
 DEFAULT_SHARP_REPO_REF = "1eaa046834b81852261262b41b0919f5c1efdd2e"
 DEFAULT_SHARP_SOURCE_URL = f"https://github.com/apple/ml-sharp/archive/{DEFAULT_SHARP_REPO_REF}.zip"
 DEFAULT_RELEASE_REPOSITORY = "andreakorkeamaki/sharp_lab"
-DEFAULT_RELEASE_VERSION = "v0.1.16"
+DEFAULT_RELEASE_VERSION = "v0.1.17"
+DEFAULT_PYTORCH_CUDA_INDEX_URL = "https://download.pytorch.org/whl/cu126"
+CUDA_RUNTIME_MARKER = "cuda-runtime.json"
 
 
 StatusCallback = Callable[[str, float | None, str | None], None]
@@ -154,6 +156,115 @@ class BlenderAddonDownloadService:
         download_to_path(url, partial, progress_callback=progress_callback)
         partial.replace(destination)
         return destination.resolve()
+
+
+class CudaRuntimeService:
+    def __init__(self, root_dir: Path) -> None:
+        self.root_dir = root_dir.resolve()
+        self.runtime_dir = self.root_dir / "runtime"
+
+    def status(self) -> dict[str, object]:
+        python_exe = self._python_executable()
+        marker_path = self.runtime_dir / CUDA_RUNTIME_MARKER
+        marker = _load_json_file(marker_path) if marker_path.exists() else None
+        return {
+            "available": os.name == "nt" and python_exe is not None,
+            "enabled": bool(marker and marker.get("torch_cuda")),
+            "runtime_path": str(self.runtime_dir),
+            "python": str(python_exe) if python_exe else None,
+            "marker": str(marker_path),
+            "torch_version": marker.get("torch_version") if marker else None,
+            "torch_cuda": marker.get("torch_cuda") if marker else None,
+            "index_url": DEFAULT_PYTORCH_CUDA_INDEX_URL,
+        }
+
+    def enable_cuda(
+        self,
+        *,
+        index_url: str = DEFAULT_PYTORCH_CUDA_INDEX_URL,
+        status_callback: StatusCallback | None = None,
+    ) -> Path:
+        if os.name != "nt":
+            raise RuntimeError("CUDA runtime enablement is only available on Windows.")
+
+        python_exe = self._python_executable()
+        if python_exe is None:
+            raise RuntimeError("Install the Windows SHARP runtime before enabling NVIDIA CUDA.")
+
+        runner = RuntimeInstallService(self.root_dir)
+        runner._status(
+            status_callback,
+            "Installing NVIDIA CUDA PyTorch wheels.",
+            10,
+            "This can download several GB from download.pytorch.org.",
+        )
+        runner._run(
+            [
+                str(python_exe),
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "--force-reinstall",
+                "torch",
+                "torchvision",
+                "torchaudio",
+                "--index-url",
+                index_url,
+            ],
+            cwd=self.runtime_dir,
+            status_callback=status_callback,
+            progress_percent=40,
+            status_message="Installing NVIDIA CUDA PyTorch wheels.",
+            stream_output=True,
+            output_parser=_parse_install_output_line,
+        )
+
+        runner._status(status_callback, "Validating CUDA-enabled PyTorch.", 92)
+        process = subprocess.run(
+            [
+                str(python_exe),
+                "-c",
+                (
+                    "import json, torch; "
+                    "print(json.dumps({'torch_version': torch.__version__, 'torch_cuda': torch.version.cuda}))"
+                ),
+            ],
+            cwd=self.runtime_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if process.returncode != 0:
+            output = process.stderr.strip() or process.stdout.strip() or "Could not import PyTorch after CUDA install."
+            raise RuntimeError(output)
+
+        output_lines = [line.strip() for line in process.stdout.splitlines() if line.strip()]
+        if not output_lines:
+            raise RuntimeError("Could not read CUDA validation output from PyTorch.")
+        payload = json.loads(output_lines[-1])
+        if not payload.get("torch_cuda"):
+            raise RuntimeError("PyTorch installed successfully, but it is still not a CUDA build.")
+
+        marker_path = self.runtime_dir / CUDA_RUNTIME_MARKER
+        marker_payload = {
+            "torch_version": payload["torch_version"],
+            "torch_cuda": payload["torch_cuda"],
+            "index_url": index_url,
+        }
+        marker_path.write_text(json.dumps(marker_payload, indent=2), encoding="utf-8")
+        runner._status(status_callback, "NVIDIA CUDA runtime enabled.", 100)
+        return self.runtime_dir.resolve()
+
+    def _python_executable(self) -> Path | None:
+        candidates = [
+            self.runtime_dir / "python" / "tools" / "python.exe",
+            self.runtime_dir / ".venv" / "Scripts" / "python.exe",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate.resolve()
+        return None
 
 
 class RuntimeInstallService:
@@ -465,6 +576,13 @@ def _filename_from_url(url: str, fallback: str) -> str:
     if not name or name in {".", ".."}:
         return fallback
     return name
+
+
+def _load_json_file(path: Path) -> dict[str, object] | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def _safe_extract_zip(archive: zipfile.ZipFile, destination: Path) -> None:

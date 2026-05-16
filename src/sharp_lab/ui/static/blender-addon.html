@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sharp Lab Blender Add-on</title>
+    <link rel="stylesheet" href="/assets/setup.css" />
+  </head>
+  <body>
+    <main class="setup-shell addon-page">
+      <section class="wizard-hero">
+        <p class="eyebrow">Blender add-on</p>
+        <h1>Download the zip.</h1>
+        <p id="addon-summary" class="lede">Loading the add-on download link.</p>
+        <p id="addon-file" class="workspace-path">-</p>
+      </section>
+
+      <section class="wizard-panel">
+        <div class="panel-head">
+          <div>
+            <p class="label">Manual Install</p>
+            <h2>Install from Blender Preferences</h2>
+          </div>
+          <p id="addon-status" class="activity-badge">Checking</p>
+        </div>
+
+        <div class="instruction-grid">
+          <article class="instruction-card">
+            <p class="step-number">Step 1</p>
+            <h3>Download</h3>
+            <p class="hint">Use the browser download. If macOS asks, allow downloads from this local Sharp Lab page.</p>
+            <a id="addon-download-link" class="button-link" href="#" target="_blank" rel="noopener">Download Add-on Zip</a>
+          </article>
+
+          <article class="instruction-card">
+            <p class="step-number">Step 2</p>
+            <h3>Open Blender</h3>
+            <p class="hint">Go to Edit, Preferences, Add-ons, then use Install from Disk.</p>
+          </article>
+
+          <article class="instruction-card">
+            <p class="step-number">Step 3</p>
+            <h3>Select the zip</h3>
+            <p id="install-location" class="hint">Choose the downloaded Sharp Lab Blender add-on zip, then enable the add-on.</p>
+          </article>
+        </div>
+
+        <p id="addon-note" class="hint addon-note">
+          Keep the zip compressed. Blender installs add-ons directly from zip files.
+        </p>
+      </section>
+    </main>
+
+    <script src="/assets/blender-addon.js" type="module"></script>
+  </body>
+</html>
